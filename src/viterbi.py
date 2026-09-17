@@ -20,7 +20,7 @@ B = [
 ]
 
 # A sequência fixa permite comparar o resultado com contas feitas à mão.
-observations = [0, 1, 2]
+observations = [1, 1, 1, 0 , 1, 1, 1, 1, 2, 1, 1, 1]
 
 
 def mpe_inference(pi, A, B, observations):
