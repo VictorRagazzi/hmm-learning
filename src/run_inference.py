@@ -23,7 +23,7 @@ def run_inference(method="mpe"):
 
     # Uma linha por execução permite adicionar métodos e comparar resultados
     # sem reescrever os registros anteriores. Guardamos também o HMM usado.
-    log_path = Path(__file__).parent / "logs" / "inference.jsonl"
+    log_path = Path(__file__).parents[1] / "logs" / "inference.jsonl"
     log_path.parent.mkdir(exist_ok=True)
     record = {
         "schema_version": 1,
