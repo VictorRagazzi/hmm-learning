@@ -5,3 +5,4 @@ logs/*.jsonl
 src/logs/*.jsonl
 figs/
 data/
+logs/

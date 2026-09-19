@@ -102,7 +102,7 @@ def generate_eeg_segment(state_index, duration_sec, fs):
     for amp, freq in zip(amplitudes, band_freqs):
         phase = rng.uniform(0, 2 * np.pi)
         signal += amp * np.sin(2 * np.pi * freq * t + phase)
-    signal += rng.normal(0, 0.5, n_samples)
+    signal += rng.normal(0, 5, n_samples)
     return signal
 
 

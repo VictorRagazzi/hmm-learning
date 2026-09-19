@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "compilado_em_utc": "2026-09-19T18:40:53.846872+00:00",
+  "modelo_llm": "qwen3-coder:30b",
+  "numero_chamadas_llm": 3,
+  "estados": [
+    "repouso",
+    "resposta"
+  ],
+  "niveis_observacao": [
+    "ausente",
+    "fraco",
+    "forte",
+    "muito_forte"
+  ],
+  "notas_especialista": {
+    "repouso": "Durante o estado de repouso, a persistência temporal deve ser alta para evitar transições prematuras. A evidência ambígua, como valores p entre 0.007071 e 0.05, deve ser tratada com cautela, mantendo o sistema no estado atual até que a força da evidência se estabeleça. O estado de repouso só deve ser abandonado quando a observação ultrapassar significativamente o limiar de 'muito_forte' (p <= 0.001), garantindo que a inércia do estado anterior seja superada por uma forte evidência temporal e espacial.",
+    "resposta": "No estado de resposta, a persistência temporal deve ser menor para permitir adaptação rápida às mudanças. Evidências ambíguas, como p entre 0.007071 e 0.05, podem indicar uma resposta incipiente e devem ser consideradas como possíveis transições. A transição para o estado de repouso só deve ocorrer quando a evidência se torna claramente 'ausente' (p > 0.05), ou quando há uma subsequência consistente de valores abaixo do limiar de 'fraco'. O sistema deve ser sensível à diminuição gradual da sincronização para evitar falsos positivos."
+  },
+  "tabela": {
+    "repouso": {
+      "ausente": "repouso",
+      "fraco": "repouso",
+      "forte": "resposta",
+      "muito_forte": "resposta"
+    },
+    "resposta": {
+      "ausente": "repouso",
+      "fraco": "resposta",
+      "forte": "resposta",
+      "muito_forte": "resposta"
+    }
+  }
+}
