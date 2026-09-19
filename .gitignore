@@ -6,3 +6,4 @@ src/logs/*.jsonl
 figs/
 data/
 logs/
+signal_detection/

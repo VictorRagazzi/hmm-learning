@@ -34,24 +34,58 @@ class TestAssrSemanticHmm(unittest.TestCase):
         self.assertGreater(forte, fraca)
 
     def test_inferencia_por_lookup(self):
-        tabela = {
-            "repouso": dict(ausente="repouso", fraco="repouso", forte="resposta", muito_forte="resposta"),
-            "resposta": dict(ausente="repouso", fraco="resposta", forte="resposta", muito_forte="resposta"),
-        }
+        tabela = {}
+        for historico in assr.gerar_historicos():
+            tabela[assr.chave_historico(historico)] = {
+                assr.NIVEIS_OBSERVACAO[0]: assr.ESTADO_INICIAL,
+                assr.NIVEIS_OBSERVACAO[1]: historico[-1],
+                assr.NIVEIS_OBSERVACAO[2]: assr.ESTADO_RESPOSTA,
+                assr.NIVEIS_OBSERVACAO[3]: assr.ESTADO_RESPOSTA,
+            }
         with patch.object(assr, "_chamar_ollama", side_effect=AssertionError("LLM online")):
             resultado = assr.inferir_sequencia([0.0, 2.5, 3.1], tabela)
-        self.assertEqual(resultado["estados"], ["repouso", "resposta", "resposta"])
+        self.assertEqual(
+            resultado["estados"],
+            [assr.ESTADO_INICIAL, assr.ESTADO_RESPOSTA, assr.ESTADO_RESPOSTA],
+        )
+        self.assertAlmostEqual(resultado["fracao_resposta"], 2 / 3)
+        self.assertEqual(resultado["maior_sequencia_resposta"], 2)
+        self.assertTrue(resultado["detectou"])
+        historico_inicial = [assr.ESTADO_INICIAL] * assr.ORDEM_CONTEXTO
+        historico_com_resposta = historico_inicial[1:] + [assr.ESTADO_RESPOSTA]
+        self.assertEqual(
+            resultado["historicos_consultados"],
+            [
+                assr.chave_historico(historico_inicial),
+                assr.chave_historico(historico_inicial),
+                assr.chave_historico(historico_com_resposta),
+            ],
+        )
 
-    def test_compilacao_faz_uma_chamada_de_notas_e_uma_por_estado(self):
-        respostas = [
-            {"notas": {"repouso": "nota r", "resposta": "nota a"}},
-            {"transicoes": dict(ausente="repouso", fraco="repouso", forte="resposta", muito_forte="resposta")},
-            {"transicoes": dict(ausente="repouso", fraco="resposta", forte="resposta", muito_forte="resposta")},
+    def test_compilacao_faz_duas_chamadas_por_historico(self):
+        historicos = assr.gerar_historicos()
+        respostas = [{"expert_note": f"nota {i}"} for i in range(len(historicos))]
+        respostas += [
+            {
+                "transicoes": {
+                    assr.NIVEIS_OBSERVACAO[0]: assr.ESTADO_INICIAL,
+                    assr.NIVEIS_OBSERVACAO[1]: historico[-1],
+                    assr.NIVEIS_OBSERVACAO[2]: assr.ESTADO_RESPOSTA,
+                    assr.NIVEIS_OBSERVACAO[3]: assr.ESTADO_RESPOSTA,
+                }
+            }
+            for historico in historicos
         ]
         with patch.object(assr, "_chamar_ollama", side_effect=respostas) as chamada:
             compilacao = assr.compilar_tabela_semantica("modelo-teste")
-        self.assertEqual(chamada.call_count, 1 + len(assr.ESTADOS))
-        self.assertEqual(compilacao["tabela"]["resposta"]["fraco"], "resposta")
+        self.assertEqual(chamada.call_count, 2 * len(assr.ESTADOS) ** assr.ORDEM_CONTEXTO)
+        self.assertEqual(len(compilacao["notas_especialista"]), len(historicos))
+        self.assertEqual(
+            compilacao["tabela"][assr.chave_historico(historicos[0])][
+                assr.NIVEIS_OBSERVACAO[2]
+            ],
+            assr.ESTADO_RESPOSTA,
+        )
 
 
 if __name__ == "__main__":

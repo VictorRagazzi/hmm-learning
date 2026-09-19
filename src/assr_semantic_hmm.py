@@ -15,6 +15,7 @@ import urllib.request
 from bisect import bisect_right
 from collections import defaultdict
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +25,11 @@ from scipy.stats import chi2
 
 
 # Configuração central
-ESTADOS = ["repouso", "resposta"]
-NIVEIS_OBSERVACAO = ["ausente", "fraco", "forte", "muito_forte"]
-ESTADO_INICIAL = "repouso"
+ESTADOS = ["rest", "response"]
+NIVEIS_OBSERVACAO = ["absent", "low", "medium", "strong"]
+ESTADO_INICIAL = "rest"
+ESTADO_RESPOSTA = "response"
+ORDEM_CONTEXTO = 3
 
 FREQUENCIAS_ESPERADAS_HZ = list(range(81, 96, 2))
 TAMANHO_JANELA_EPOCAS = 20
@@ -153,7 +156,7 @@ def _descricao_estatistica_niveis() -> str:
     descricoes = []
     for indice, nivel in enumerate(NIVEIS_OBSERVACAO):
         if not limites_p:
-            intervalo = "todos os valores"
+            intervalo = "all values"
         elif indice == 0:
             intervalo = f"p > {limites_p[0]:.4g}"
         elif indice == len(NIVEIS_OBSERVACAO) - 1:
@@ -174,8 +177,8 @@ def _chamar_ollama(prompt: str, modelo: str) -> dict[str, Any]:
             {
                 "role": "system",
                 "content": (
-                    "Você é especialista em ASSR, EEG e inferência temporal. "
-                    "Responda somente com o objeto JSON solicitado, sem markdown."
+                    "You are an expert in ASSR, EEG, and temporal inference. "
+                    "Reply only with the requested JSON object, without Markdown."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -205,58 +208,92 @@ def _validar_chaves_exatas(objeto: dict[str, Any], esperadas: list[str], nome: s
         raise ValueError(f"{nome}: chaves {sorted(objeto)}; esperadas {sorted(esperadas)}")
 
 
-def compilar_tabela_semantica(modelo: str = OLLAMA_MODEL) -> dict[str, Any]:
-    """Gera notas em uma chamada e a tabela em uma chamada por estado."""
-    prompt_notas = f"""
-Gere notas de especialista para modular transições de um modelo temporal de
-detecção de ASSR. Estados possíveis: {json.dumps(ESTADOS, ensure_ascii=False)}.
-A observação vem de sincronismo de fase agregado em 8 frequências e 16 canais,
-ordenada de evidência ausente para muito forte. Explique persistência temporal,
-como tratar evidência ambígua e quando a observação deve superar a inércia do
-estado anterior. Não determine rigidamente a tabela nesta etapa.
-Cortes estatísticos atuais: {_descricao_estatistica_niveis()}.
-Retorne exatamente: {{"notas": {{"repouso": "...", "resposta": "..."}}}}.
-""".strip()
-    resposta_notas = _chamar_ollama(prompt_notas, modelo)
-    if set(resposta_notas) != {"notas"} or not isinstance(resposta_notas["notas"], dict):
-        raise ValueError("Resposta de notas fora do esquema esperado.")
-    notas = resposta_notas["notas"]
-    _validar_chaves_exatas(notas, ESTADOS, "notas")
-    if any(not isinstance(notas[e], str) or not notas[e].strip() for e in ESTADOS):
-        raise ValueError("Cada estado deve possuir uma nota textual não vazia.")
+def gerar_historicos() -> list[tuple[str, ...]]:
+    """Enumera as len(ESTADOS) ** ORDEM_CONTEXTO linhas da tabela."""
+    if ORDEM_CONTEXTO < 1:
+        raise ValueError("ORDEM_CONTEXTO deve ser pelo menos 1.")
+    return list(product(ESTADOS, repeat=ORDEM_CONTEXTO))
 
+
+def chave_historico(historico: tuple[str, ...] | list[str]) -> str:
+    """Representa um contexto de forma legível e serializável em JSON."""
+    if len(historico) != ORDEM_CONTEXTO or any(e not in ESTADOS for e in historico):
+        raise ValueError(f"Histórico inválido: {historico}")
+    return " -> ".join(historico)
+
+
+def compilar_tabela_semantica(modelo: str = OLLAMA_MODEL) -> dict[str, Any]:
+    """Faz uma chamada de notas e uma de compilação para cada histórico."""
+    historicos = gerar_historicos()
+    notas: dict[str, str] = {}
+
+    # Primeira rodada: uma expert note exclusiva por linha de contexto.
+    for historico in historicos:
+        chave = chave_historico(historico)
+        prompt_notas = f"""
+Generate SPECIFIC expert notes for one context row of a temporal ASSR detection
+model. History, from oldest to most recent: {chave}.
+Context order: {ORDEM_CONTEXTO}. Allowed states:
+{json.dumps(ESTADOS, ensure_ascii=False)}. The observation is derived from phase
+synchrony aggregated across 8 frequencies and 16 channels. Statistical cutoffs:
+{_descricao_estatistica_niveis()}.
+
+Capture the particular temporal meaning of this sequence: persistence, recent
+response onset or interruption, how to handle ambiguous evidence, and when the
+current observation should override the tendency suggested by the history. Do
+not rigidly determine the table, and do not produce a generic note reusable for
+another context. Write the note in English. Return exactly:
+{{"expert_note": "..."}}.
+""".strip()
+        resposta = _chamar_ollama(prompt_notas, modelo)
+        if set(resposta) != {"expert_note"}:
+            raise ValueError(f"Expert note fora do esquema para {chave}.")
+        nota = resposta["expert_note"]
+        if not isinstance(nota, str) or not nota.strip():
+            raise ValueError(f"Expert note vazia para {chave}.")
+        notas[chave] = nota.strip()
+        print(f"Expert note gerada para {chave}: {notas[chave]}")
+
+    # Segunda rodada: uma chamada por linha, cobrindo todos os níveis.
     tabela: dict[str, dict[str, str]] = {}
-    for estado_anterior in ESTADOS:
-        exemplo = {nivel: "repouso ou resposta" for nivel in NIVEIS_OBSERVACAO}
+    for historico in historicos:
+        chave = chave_historico(historico)
+        exemplo = {nivel: "one allowed state" for nivel in NIVEIS_OBSERVACAO}
         prompt = f"""
-Compile uma linha de uma tabela temporal determinística para detectar ASSR.
-Estado anterior: {estado_anterior!r}.
-Estados permitidos: {json.dumps(ESTADOS, ensure_ascii=False)}.
-Níveis, em ordem crescente: {json.dumps(NIVEIS_OBSERVACAO, ensure_ascii=False)}.
-Cortes estatísticos: {_descricao_estatistica_niveis()}.
-Nota de especialista: {notas[estado_anterior]}
-Decida o próximo estado para CADA nível numa única análise coerente. A nota
-modula a decisão, mas não pode fazer a observação atual ser ignorada. Evidência
-mais forte nunca deve favorecer menos a resposta que evidência mais fraca.
-Trate o nível intermediário como ambíguo, não como ausência. Quando a nota der
-suporte, use o estado anterior como desempate nessa ambiguidade, pois uma linha
-que ignore completamente o estado anterior elimina a memória temporal do modelo.
-Retorne exatamente: {{"transicoes": {json.dumps(exemplo, ensure_ascii=False)}}}.
+Compile one row of a deterministic temporal table for ASSR detection.
+History, from oldest to most recent: {chave}.
+Context order: {ORDEM_CONTEXTO}.
+Allowed states: {json.dumps(ESTADOS, ensure_ascii=False)}.
+Complete observation levels, in increasing evidence order:
+{json.dumps(NIVEIS_OBSERVACAO, ensure_ascii=False)}.
+Statistical cutoffs: {_descricao_estatistica_niveis()}.
+Expert notes EXCLUSIVE to this history: {notas[chave]}
+
+Decide the next state for EACH level in a single coherent analysis. The note
+modulates the decision, but it must not cause the current observation to be
+ignored. Stronger evidence must never favor the response state less than weaker
+evidence. Use the complete history to resolve ambiguous observations.
+Return exactly: {{"transicoes": {json.dumps(exemplo, ensure_ascii=False)}}}.
 """.strip()
         resposta = _chamar_ollama(prompt, modelo)
         if set(resposta) != {"transicoes"} or not isinstance(resposta["transicoes"], dict):
-            raise ValueError(f"Resposta de compilação inválida para {estado_anterior}.")
+            raise ValueError(f"Resposta de compilação inválida para {chave}.")
         transicoes = resposta["transicoes"]
-        _validar_chaves_exatas(transicoes, NIVEIS_OBSERVACAO, estado_anterior)
+        _validar_chaves_exatas(transicoes, NIVEIS_OBSERVACAO, chave)
         if any(destino not in ESTADOS for destino in transicoes.values()):
-            raise ValueError(f"{estado_anterior}: estado desconhecido retornado pela LLM.")
-        tabela[estado_anterior] = transicoes
+            raise ValueError(f"{chave}: estado desconhecido retornado pela LLM.")
+        tabela[chave] = transicoes
+        print(f"Tabela compilada para {chave}: {transicoes}")
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "compilado_em_utc": datetime.now(timezone.utc).isoformat(),
         "modelo_llm": modelo,
-        "numero_chamadas_llm": 1 + len(ESTADOS),
+        "ordem_contexto": ORDEM_CONTEXTO,
+        "numero_historicos": len(historicos),
+        "chamadas_expert_notes": len(historicos),
+        "chamadas_compilacao": len(historicos),
+        "numero_chamadas_llm": 2 * len(historicos),
         "estados": ESTADOS,
         "niveis_observacao": NIVEIS_OBSERVACAO,
         "notas_especialista": notas,
@@ -276,12 +313,15 @@ def carregar_tabela(caminho: Path = ARQUIVO_TABELA) -> dict[str, dict[str, str]]
         raise ValueError("Estados da tabela diferem da configuração atual.")
     if compilacao.get("niveis_observacao") != NIVEIS_OBSERVACAO:
         raise ValueError("Níveis da tabela diferem da configuração atual.")
+    if compilacao.get("ordem_contexto") != ORDEM_CONTEXTO:
+        raise ValueError("Ordem de contexto da tabela difere da configuração atual.")
     tabela = compilacao.get("tabela", {})
-    _validar_chaves_exatas(tabela, ESTADOS, "tabela")
-    for estado in ESTADOS:
-        _validar_chaves_exatas(tabela[estado], NIVEIS_OBSERVACAO, estado)
-        if any(destino not in ESTADOS for destino in tabela[estado].values()):
-            raise ValueError(f"Destino inválido em {estado}.")
+    chaves = [chave_historico(h) for h in gerar_historicos()]
+    _validar_chaves_exatas(tabela, chaves, "tabela")
+    for chave in chaves:
+        _validar_chaves_exatas(tabela[chave], NIVEIS_OBSERVACAO, chave)
+        if any(destino not in ESTADOS for destino in tabela[chave].values()):
+            raise ValueError(f"Destino inválido em {chave}.")
     return tabela
 
 
@@ -289,18 +329,23 @@ def inferir_sequencia(
     estatisticas: list[float], tabela: dict[str, dict[str, str]]
 ) -> dict[str, Any]:
     """Inferência online por lookup puro; nunca chama a LLM."""
-    estado = ESTADO_INICIAL
-    niveis, estados = [], []
+    if ESTADO_RESPOSTA not in ESTADOS:
+        raise ValueError("ESTADO_RESPOSTA deve pertencer a ESTADOS.")
+    historico = [ESTADO_INICIAL] * ORDEM_CONTEXTO
+    niveis, estados, historicos_consultados = [], [], []
     for estatistica in estatisticas:
         nivel = discretizar(estatistica, NIVEIS_OBSERVACAO)
-        estado = tabela[estado][nivel]
+        chave = chave_historico(historico)
+        estado = tabela[chave][nivel]
         niveis.append(nivel)
         estados.append(estado)
+        historicos_consultados.append(chave)
+        historico = historico[1:] + [estado]
 
-    fracao = sum(e == "resposta" for e in estados) / len(estados) if estados else 0.0
+    fracao = sum(e == ESTADO_RESPOSTA for e in estados) / len(estados) if estados else 0.0
     maior_sequencia = atual = 0
     for observado in estados:
-        atual = atual + 1 if observado == "resposta" else 0
+        atual = atual + 1 if observado == ESTADO_RESPOSTA else 0
         maior_sequencia = max(maior_sequencia, atual)
     criterios = (fracao >= FRACAO_MINIMA_RESPOSTA, maior_sequencia >= JANELAS_CONSECUTIVAS_RESPOSTA)
     if COMBINACAO_CRITERIOS == "ou":
@@ -312,6 +357,7 @@ def inferir_sequencia(
     return {
         "niveis": niveis,
         "estados": estados,
+        "historicos_consultados": historicos_consultados,
         "fracao_resposta": fracao,
         "maior_sequencia_resposta": maior_sequencia,
         "detectou": detectou,
@@ -382,6 +428,8 @@ def validar_dados(
             "estados": ESTADOS,
             "niveis_observacao": NIVEIS_OBSERVACAO,
             "estado_inicial": ESTADO_INICIAL,
+            "estado_resposta": ESTADO_RESPOSTA,
+            "ordem_contexto": ORDEM_CONTEXTO,
             "frequencias_hz": FREQUENCIAS_ESPERADAS_HZ,
             "tamanho_janela_epocas": TAMANHO_JANELA_EPOCAS,
             "passo_janela_epocas": PASSO_JANELA_EPOCAS,
