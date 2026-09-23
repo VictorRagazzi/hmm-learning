@@ -1,0 +1,456 @@
+{
+  "nome": "matriz_transicao_A",
+  "descricao": "P(proximo estado | estado atual)",
+  "estados_linhas": [
+    "Ausente",
+    "Presente"
+  ],
+  "estados_colunas": [
+    "Ausente",
+    "Presente"
+  ],
+  "matriz": [
+    [
+      0.9605734767025089,
+      0.03942652329749108
+    ],
+    [
+      0.01705426356589146,
+      0.9829457364341085
+    ]
+  ],
+  "probabilidades": {
+    "Ausente": {
+      "Ausente": 0.9605734767025089,
+      "Presente": 0.03942652329749108
+    },
+    "Presente": {
+      "Ausente": 0.01705426356589146,
+      "Presente": 0.9829457364341085
+    }
+  },
+  "configuracao": {
+    "tamanho_janela_epocas": 10,
+    "passo_janela_epocas": 5,
+    "padrao_ausente": "*ESP.mat",
+    "padrao_presente": "*dB.mat"
+  },
+  "resumo": {
+    "Ausente": {
+      "p_self": 0.9605734767025089,
+      "n_arquivos_encontrados": 11,
+      "n_arquivos_validos": 11,
+      "total_janelas": 279,
+      "total_auto_transicoes": 268,
+      "arquivos": [
+        {
+          "arquivo": "./data/AbESP.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/AnESP.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/BbESP.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/ErESP.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/LuESP.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/QuESP.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/SaESP.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/SoESP.mat",
+          "n_epocas": 30,
+          "n_janelas": 5,
+          "n_auto_transicoes": 4
+        },
+        {
+          "arquivo": "./data/TiESP.mat",
+          "n_epocas": 201,
+          "n_janelas": 39,
+          "n_auto_transicoes": 38
+        },
+        {
+          "arquivo": "./data/ViESP.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/WrESP.mat",
+          "n_epocas": 200,
+          "n_janelas": 39,
+          "n_auto_transicoes": 38
+        }
+      ]
+    },
+    "Presente": {
+      "p_self": 0.9829457364341085,
+      "n_arquivos_encontrados": 55,
+      "n_arquivos_validos": 55,
+      "total_janelas": 3225,
+      "total_auto_transicoes": 3170,
+      "arquivos": [
+        {
+          "arquivo": "./data/Ab30dB.mat",
+          "n_epocas": 500,
+          "n_janelas": 99,
+          "n_auto_transicoes": 98
+        },
+        {
+          "arquivo": "./data/Ab40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Ab50dB.mat",
+          "n_epocas": 301,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Ab60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Ab70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/An30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/An40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/An50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/An60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/An70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Bb30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Bb40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Bb50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Bb60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Bb70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Er30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Er40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Er50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Er60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Er70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Lu30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Lu40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Lu50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Lu60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Lu70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Qu30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Qu40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Qu50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Qu60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Qu70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Sa30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Sa40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Sa50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Sa60dB.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/Sa70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/So30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/So40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/So50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/So60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/So70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Ti30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Ti40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Ti50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Ti60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Ti70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Vi30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Vi40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Vi50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Vi60dB.mat",
+          "n_epocas": 180,
+          "n_janelas": 35,
+          "n_auto_transicoes": 34
+        },
+        {
+          "arquivo": "./data/Vi70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        },
+        {
+          "arquivo": "./data/Wr30dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Wr40dB.mat",
+          "n_epocas": 480,
+          "n_janelas": 95,
+          "n_auto_transicoes": 94
+        },
+        {
+          "arquivo": "./data/Wr50dB.mat",
+          "n_epocas": 300,
+          "n_janelas": 59,
+          "n_auto_transicoes": 58
+        },
+        {
+          "arquivo": "./data/Wr60dB.mat",
+          "n_epocas": 120,
+          "n_janelas": 23,
+          "n_auto_transicoes": 22
+        },
+        {
+          "arquivo": "./data/Wr70dB.mat",
+          "n_epocas": 60,
+          "n_janelas": 11,
+          "n_auto_transicoes": 10
+        }
+      ]
+    }
+  },
+  "metodo": "Para cada arquivo com N janelas, contam-se N-1 auto-transicoes e uma saida implicita para o outro estado.",
+  "aviso": "Heuristica baseada na duracao dos arquivos; nao e uma estimativa de transicoes ocultas observadas nem uma validacao clinica."
+}

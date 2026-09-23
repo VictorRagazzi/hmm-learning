@@ -1,0 +1,254 @@
+{
+  "nome": "matriz_emissao_B",
+  "descricao": "P(label de observacao | estado), com frequencias agrupadas",
+  "estados_linhas": [
+    "Ausente",
+    "Presente"
+  ],
+  "labels_colunas": [
+    "muito_baixo",
+    "baixo",
+    "medio",
+    "alto",
+    "muito_alto"
+  ],
+  "matriz": [
+    [
+      0.5139852315954352,
+      0.3765943164018796,
+      0.05840232714253748,
+      0.04094875811143433,
+      0.010069366748713358
+    ],
+    [
+      0.31304542403222196,
+      0.3752517341687178,
+      0.09420452002685165,
+      0.09733721190422913,
+      0.12016110986797941
+    ]
+  ],
+  "probabilidades": {
+    "Ausente": {
+      "muito_baixo": 0.5139852315954352,
+      "baixo": 0.3765943164018796,
+      "medio": 0.05840232714253748,
+      "alto": 0.04094875811143433,
+      "muito_alto": 0.010069366748713358
+    },
+    "Presente": {
+      "muito_baixo": 0.31304542403222196,
+      "baixo": 0.3752517341687178,
+      "medio": 0.09420452002685165,
+      "alto": 0.09733721190422913,
+      "muito_alto": 0.12016110986797941
+    }
+  },
+  "contagens": {
+    "Ausente": {
+      "muito_baixo": 1148,
+      "baixo": 841,
+      "medio": 130,
+      "alto": 91,
+      "muito_alto": 22
+    },
+    "Presente": {
+      "muito_baixo": 699,
+      "baixo": 838,
+      "medio": 210,
+      "alto": 217,
+      "muito_alto": 268
+    }
+  },
+  "configuracao": {
+    "canal": 0,
+    "detector": "teste_f_espectral_local",
+    "tamanho_janela_epocas": 10,
+    "passo_janela_epocas": 5,
+    "p_value_boundaries": [
+      0.5,
+      0.1,
+      0.05,
+      0.01
+    ],
+    "alpha": 0.05,
+    "k_sintetico": 0.01,
+    "smoothing": 0.5
+  },
+  "resumo": {
+    "n_arquivos": 11,
+    "n_frequencias": 8,
+    "n_janelas_por_estado": 2232,
+    "thresholds_f": [
+      1.0,
+      1.7938433065702954,
+      2.124155212919735,
+      2.937735277365816
+    ],
+    "f_critico": 2.124155212919735,
+    "taxa_falso_positivo_global_esp": 0.050627240143369175
+  },
+  "diagnostico_por_frequencia": {
+    "81.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.05017921146953405,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 135,
+          "baixo": 111,
+          "medio": 19,
+          "alto": 13,
+          "muito_alto": 1
+        },
+        "Presente": {
+          "muito_baixo": 89,
+          "baixo": 109,
+          "medio": 21,
+          "alto": 31,
+          "muito_alto": 29
+        }
+      }
+    },
+    "83.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.1003584229390681,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 122,
+          "baixo": 115,
+          "medio": 14,
+          "alto": 22,
+          "muito_alto": 6
+        },
+        "Presente": {
+          "muito_baixo": 75,
+          "baixo": 111,
+          "medio": 27,
+          "alto": 34,
+          "muito_alto": 32
+        }
+      }
+    },
+    "85.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.043010752688172046,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 140,
+          "baixo": 107,
+          "medio": 20,
+          "alto": 10,
+          "muito_alto": 2
+        },
+        "Presente": {
+          "muito_baixo": 92,
+          "baixo": 92,
+          "medio": 31,
+          "alto": 27,
+          "muito_alto": 37
+        }
+      }
+    },
+    "87.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.05017921146953405,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 146,
+          "baixo": 103,
+          "medio": 16,
+          "alto": 11,
+          "muito_alto": 3
+        },
+        "Presente": {
+          "muito_baixo": 74,
+          "baixo": 116,
+          "medio": 26,
+          "alto": 32,
+          "muito_alto": 31
+        }
+      }
+    },
+    "89.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.017921146953405017,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 126,
+          "baixo": 127,
+          "medio": 21,
+          "alto": 5,
+          "muito_alto": 0
+        },
+        "Presente": {
+          "muito_baixo": 82,
+          "baixo": 105,
+          "medio": 30,
+          "alto": 28,
+          "muito_alto": 34
+        }
+      }
+    },
+    "91.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.04659498207885305,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 147,
+          "baixo": 102,
+          "medio": 17,
+          "alto": 10,
+          "muito_alto": 3
+        },
+        "Presente": {
+          "muito_baixo": 71,
+          "baixo": 122,
+          "medio": 26,
+          "alto": 25,
+          "muito_alto": 35
+        }
+      }
+    },
+    "93.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.043010752688172046,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 150,
+          "baixo": 104,
+          "medio": 13,
+          "alto": 9,
+          "muito_alto": 3
+        },
+        "Presente": {
+          "muito_baixo": 85,
+          "baixo": 106,
+          "medio": 30,
+          "alto": 19,
+          "muito_alto": 39
+        }
+      }
+    },
+    "95.0": {
+      "n_janelas_por_estado": 279,
+      "taxa_falso_positivo_esp": 0.053763440860215055,
+      "contagens": {
+        "Ausente": {
+          "muito_baixo": 182,
+          "baixo": 72,
+          "medio": 10,
+          "alto": 11,
+          "muito_alto": 4
+        },
+        "Presente": {
+          "muito_baixo": 131,
+          "baixo": 77,
+          "medio": 19,
+          "alto": 21,
+          "muito_alto": 31
+        }
+      }
+    }
+  },
+  "aviso": "A linha Presente usa injecao sintetica e nao representa calibracao clinica validada."
+}

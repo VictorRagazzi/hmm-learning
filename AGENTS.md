@@ -1,134 +1,93 @@
-# Contexto
+# Instruções para agentes — parametrização do HMM para ASSR
 
-Você vai implementar um pipeline de detecção de resposta evocada auditiva
-(ASSR - Auditory Steady-State Response) em sinais de EEG, usando uma
-arquitetura chamada "Semantic Temporal Compilation": um HMM binário
-{repouso, resposta} cuja tabela de transição/emissão não é aprendida
-estatisticamente, mas compilada offline por uma LLM que raciocina
-semanticamente sobre cada combinação (estado_anterior, observação).
+## Leitura obrigatória
 
-Isso é inspirado em trabalho anterior onde uma LLM substituiu inferência MPE
-em Redes Bayesianas: em vez de usar CPTs numéricas, o valor mais plausível
-de uma variável era decidido por raciocínio semântico da LLM sobre o
-contexto causal, e essa decisão era pré-compilada em uma tabela de lookup.
+Antes de alterar o processamento de EEG, `src/get_obs_matrix.py` ou
+`src/get_tran_matrix.py`, leia por
+completo [docs/CONTEXTO_GET_OBS_MATRIX.md](docs/CONTEXTO_GET_OBS_MATRIX.md).
+Esse documento é a referência técnica do estado atual, fórmulas, dados,
+resultados, limitações e comandos de verificação.
 
-# Etapa 1 — Investigação (fazer ANTES de qualquer implementação)
+Sempre que uma alteração mudar detector, configuração, estrutura retornada,
+resultados de referência ou decisões metodológicas, atualize também esse
+documento na mesma tarefa. Não deixe a documentação descrever uma versão antiga.
 
-Os dados estão em arquivos .mat contendo ondas de EEG coletadas com janelas
-de estimulação em diferentes intensidades (40, 60, 80 dB e ESP — estimulação
-sem som, usada como controle negativo). O objetivo é detectar se existe
-resposta evocada na banda de frequências 82:2:96 Hz (ou seja, 82, 84, 86,
-88, 90, 92, 94, 96 Hz).
+## Escopo atual
 
-Antes de implementar, investigue os arquivos .mat e leia código MATLAB (.m)
-relacionado, se existir, para responder:
+O projeto estima a matriz de emissão `B` e uma matriz de transição heurística
+`A` para um HMM de detecção de ASSR em EEG. Treinamento, inferência e decisão
+final do HMM ainda não fazem parte desta etapa.
 
-1. Como o sinal está estruturado (taxa de amostragem, duração das
-   gravações, quantidade de canais, formato das janelas de estimulação).
-2. Se já existe algum processamento estatístico de referência para detectar
-   resposta na banda 82-96 Hz (F-test, Hotelling T², magnitude espectral,
-   SNR, etc.) — seja em código MATLAB existente ou em literatura de ASSR
-   padrão.
-3. Proponha um método concreto de calcular, para uma janela temporal do
-   sinal contínuo, um valor estatístico agregado que resuma a evidência de
-   resposta na banda 82-96 Hz inteira (não por frequência individual —
-   queremos UM valor por janela, agregando a banda toda).
-4. Relate o que encontrou antes de prosseguir para a implementação.
+Não apresente probabilidades obtidas por injeção sintética como estimativas
+clínicas validadas.
 
-# Etapa 2 — Arquitetura (o que implementar)
+## Implementação vigente
 
-## Estados ocultos
-Dois estados: `repouso` e `resposta`. A lista de estados deve ser uma
-variável declarada no topo do código (ex: `ESTADOS = ["repouso", "resposta"]`),
-não hardcoded em lógica espalhada — facilita estender para mais estados no
-futuro se necessário.
+- Matriz B: `src/get_obs_matrix.py`.
+- Matriz A: `src/get_tran_matrix.py`.
+- Entrada de calibração: todos os arquivos `data/*ESP.mat`.
+- EEG: `x` no formato `(canais, épocas, amostras)`; leia `Fs`, `freqEstim` e
+  `binsM` de cada arquivo.
+- Canal configurável: `CHANNEL_INDEX`.
+- Detector: razão de potências por janela entre `freqEstim[i]` e `binsM[i]`.
+- Com `M` épocas por janela, usa-se aproximadamente `F(2M, 2M)` sob H0.
+- Configuração atual: janela de 10 épocas, passo 5, cinco labels e `alpha=0.05`.
+- Thresholds: quantis teóricos da distribuição F definidos por faixas de
+  p-valor; não são quantis empíricos dos dados ESP.
+- `B(Ausente)`: histograma das janelas ESP.
+- `B(Presente)`: mesmas janelas ESP após senoide com amplitude
+  `K_SINTETICO * std(época)`.
+- Suavização atual: pseudocontagem 0.5 por célula.
+- A matriz B final é global: some contagens das oito frequências e normalize
+  uma única vez.
+- Preserve resultados por frequência como diagnóstico. Não concatene
+  sequências temporais de frequências, participantes ou condições diferentes.
+- A matriz A usa uma heurística de duração: cada arquivo com N janelas
+  contribui com N-1 autopassagens e uma saída implícita. Ela não foi estimada
+  a partir de transições ocultas observadas.
+- Ao executar os scripts, grave as tabelas em `results/observation_matrix.json`
+  e `results/transition_matrix.json`.
 
-## Observação
-A observação de cada janela temporal vem do processamento de sinal
-tradicional decidido na Etapa 1 (ex: um valor de F-test ou SNR agregado na
-banda 82-96 Hz). Esse valor contínuo deve ser discretizado em categorias
-ordinais de evidência, por exemplo:
+A estatística atual não é MSC nem CSM e não deve receber esses nomes.
 
-    NIVEIS_OBSERVACAO = ["ausente", "fraco", "forte", "muito_forte"]
+## Decisões que não devem ser revertidas silenciosamente
 
-Importante: a função de discretização deve ser genérica em relação ao
-número de categorias em NIVEIS_OBSERVACAO — se eu mudar essa lista para ter
-3 ou 6 níveis, a função de discretização (ex: dividir a faixa de
-p-valores/SNR observada nos dados em N faixas, ou usar cortes definidos por
-percentil) deve se adaptar automaticamente, sem precisar editar a lógica de
-discretização. Não hardcode "4 categorias" na função.
+- Use uma única matriz B compartilhada pelas frequências.
+- Mantenha a taxa de falso positivo separada por frequência, pois 83 Hz mostrou
+  desvio relevante mesmo com falso positivo global próximo de 5%.
+- Não fixe 180 épocas: os arquivos reais ESP possuem entre 30 e 300.
+- Não fixe `Fs`: os dados atuais incluem 1000 e 1750 Hz.
+- Não associe `K_SINTETICO` diretamente a dB acústicos.
+- Não use estímulos reais para ajustar thresholds e avaliar o mesmo ajuste como
+  se fosse validação independente.
+- Se o detector, número de bins de ruído, canais ou forma de agregação mudar,
+  reveja a distribuição F e seus graus de liberdade.
+- Não descreva a matriz A atual como resultado de Baum–Welch, transições reais
+  observadas ou persistência fisiológica validada.
+- Mantenha tamanho e passo das janelas consistentes nos dois scripts, salvo
+  decisão explícita e documentada em contrário.
 
-## Compilação offline da tabela semântica (uso de LLM)
+## Metadados e validação
 
-Para cada estado em ESTADOS, fazer UMA chamada à LLM contendo:
+Preserve nos resultados intermediários participante, condição, canal,
+frequência, bin de ruído, intervalo de épocas, `Fs`, valor F, p-valor e label.
 
-  - o estado anterior sendo considerado;
-  - a lista completa de níveis de observação possíveis (NIVEIS_OBSERVACAO);
-  - "expert notes" sobre esse estado (ver abaixo);
-  - pedir que a LLM decida, para CADA nível de observação da lista, qual é
-    o próximo estado mais plausível (repouso ou resposta).
+Depois de alterações, execute:
 
-Ou seja: número de chamadas à LLM = número de estados (2, nesse caso), não
-uma chamada por combinação (estado, observação). Cada chamada deve cobrir
-todos os níveis de observação de uma vez, para que a LLM decida com
-consistência relativa entre os níveis, evitando fronteiras arbitrárias
-entre categorias vizinhas.
+```bash
+.venv/bin/python -m py_compile src/get_obs_matrix.py
+.venv/bin/python src/get_obs_matrix.py
+.venv/bin/python src/get_tran_matrix.py
+```
 
-Antes da compilação da tabela, gerar "expert notes" para cada estado — uma
-única vez, também via LLM — descrevendo o conhecimento de domínio relevante
-sobre transições em ASSR. Por exemplo, para o estado `resposta`: sob que
-condições uma resposta seguiria em curso vs. voltaria a repouso; que peso
-dar a uma observação fortemente ausente vs. uma observação ambigua/fraca;
-etc. Essas notas servem para MODULAR a decisão da LLM na etapa de
-compilação, não para determiná-la rigidamente — a observação atual não deve
-ser ignorada só porque o estado anterior "sugeriria" outra coisa.
+Relate as matrizes A e B, quantidade de arquivos/frequências/janelas, falso
+positivo global e falso positivo por frequência. Confirme que os JSON foram
+gravados e que todas as linhas somam 1. Use arquivos ESP autênticos; um arquivo
+de estímulo apenas renomeado não serve para estimar `B(Ausente)`.
 
-O resultado da compilação é uma tabela/dicionário:
+## Estilo
 
-    tabela[estado_anterior][nivel_observacao] = proximo_estado
-
-## Inferência online
-
-Depois de compilada a tabela, a inferência sobre uma sequência de janelas
-do sinal é pura consulta a essa tabela — SEM nenhuma chamada à LLM:
-
-    estado = "repouso"  # estado inicial
-    for janela in sequencia_de_janelas:
-        observacao_continua = calcular_estatistica_banda(janela)
-        nivel = discretizar(observacao_continua, NIVEIS_OBSERVACAO)
-        estado = tabela[estado][nivel]
-        registrar(estado)
-
-O veredito final da sequência (detectou ou não detectou resposta) deve ser
-derivado da sequência de estados resultante — defina um critério simples e
-explícito (ex: "resposta" ocorreu em pelo menos X% das janelas, ou por N
-janelas consecutivas) e deixe esse critério também como parâmetro
-configurável no topo do código, não fixo no meio da lógica.
-
-## Validação
-
-Cada intensidade de estimulação (40, 60, 80 dB, ESP) é um experimento/
-sequência independente — rode o pipeline separadamente para cada uma. Como
-ground truth aproximado: espera-se NÃO detecção em estimulação ESP
-(controle) e espera-se detecção nos testes com estímulo real. Use isso para
-uma validação de sanidade do pipeline, não como treinamento.
-
-# Estilo de código
-
-- Funções claras e diretas, mesmo que grandes — não fragmentar em excesso.
-- Poucos arquivos.
-- Sem otimizações prematuras ou padrões de "clean code" que compliquem
-  legibilidade — priorize entendimento total do fluxo sobre elegância.
-- Toda constante/configuração relevante (ESTADOS, NIVEIS_OBSERVACAO,
-  critério de decisão final, etc.) declarada no topo do arquivo principal,
-  não espalhada implicitamente pelo código.
-
-# O que NÃO fazer
-
-- Não chamar a LLM durante a inferência online — isso quebra a premissa
-  central da arquitetura (custo online deve ser zero chamadas).
-- Não compilar célula a célula (uma chamada por combinação estado×
-  observação) — compilar por estado, cobrindo todos os níveis de
-  observação em uma única chamada.
-- Não hardcode o número de níveis de observação em nenhuma lógica de
-  discretização ou de prompt de compilação.
+Mantenha configurações relevantes no topo do arquivo principal. Prefira poucas
+funções claras e fluxo explícito. Antes de mudanças substanciais, inspecione o
+código e os metadados reais. Preserve alterações não relacionadas já existentes
+na árvore de trabalho.
