@@ -1,4 +1,28 @@
 {
+    "latex-workshop.latex.tools": [
+        {
+            "name": "tectonic",
+            "command": "/home/torugo/.local/bin/tectonic",
+            "args": [
+                "%DOC_EXT%"
+            ]
+        }
+    ],
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "tectonic",
+            "tools": [
+                "tectonic"
+            ]
+        }
+    ],
+    "latex-workshop.latex.recipe.default": "first",
+    "latex-workshop.latex.external.build.command": "/home/torugo/.local/bin/tectonic",
+    "latex-workshop.latex.external.build.args": [
+        "%DOC_EXT%"
+    ],
+    "latex-workshop.latex.autoBuild.run": "onSave",
+    "latex-workshop.view.pdf.viewer": "tab",
     "files.exclude": {
         "**/.git": true,
         "**/.svn": true,
@@ -8,6 +32,10 @@
         "**/main.aux": true,
         "**/main.log": true,
         "**/main.gz": true,
-        "**/main.out": true
+        "**/main.out": true,
+        "**/apresentacao.aux": true,
+        "**/apresentacao.log": true,
+        "**/apresentacao.gz": true,
+        "**/apresentacao.out": true
     }
 }

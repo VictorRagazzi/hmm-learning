@@ -1,14 +1,16 @@
 """Estima as linhas Ausente e Presente da matriz de emissao B.
 
-A observacao e o teste F espectral local, calculado separadamente para cada
-frequencia de estimulacao e em janelas de epocas::
+A observacao e a magnitude quadratica da coerencia (MSC), calculada
+separadamente para cada frequencia de estimulacao e em janelas de epocas::
 
-    F = media_m |X_m(f_alvo)|**2 / media_m |X_m(f_ruido)|**2
+    MSC = |sum_m X_m(f_alvo)|**2 / (M * sum_m |X_m(f_alvo)|**2)
 
-``f_ruido`` e o bin de controle correspondente em ``binsM``. Sob H0, e sob
-as hipoteses de coeficientes gaussianos independentes e piso espectral local
-plano, F segue aproximadamente F(2*M, 2*M), em que M e o numero de epocas da
-janela. Isso NAO e MSC nem CSM.
+Sob H0, coeficientes complexos gaussianos circulares e epocas independentes,
+``MSC ~ Beta(1, M - 1)``, em que M e o numero de epocas da janela. A MSC mede
+fase e magnitude; ela nao e CSM nem o teste F espectral local.
+
+``binsM`` continua sendo lido e preservado como metadado/controle, mas nao e
+usado como denominador da MSC.
 
 Os limites dos labels sao quantis teoricos dessa distribuicao, definidos por
 faixas de p-valor. Assim, B(Ausente) nao e forcada a ser uniforme como ocorria
@@ -27,7 +29,7 @@ import os
 
 import h5py
 import numpy as np
-from scipy.stats import f as distribuicao_f
+from scipy.stats import beta as distribuicao_msc
 
 
 # ============================================================
@@ -43,7 +45,7 @@ ESTADOS = ["Ausente", "Presente"]
 PI_INICIAL = [0.99, 0.01]
 
 CHANNEL_INDEX = 0
-DETECTOR = "teste_f_espectral_local"
+DETECTOR = "magnitude_quadratica_coerencia_msc"
 
 # Cada janela gera uma observacao. So entram janelas completas.
 WINDOW_SIZE_EPOCHS = 10
@@ -144,13 +146,15 @@ def validar_configuracao():
 
 
 def validar_correspondencia_frequencias(arquivos):
-    """Garante que indice i representa o mesmo par alvo/ruido em todo arquivo."""
+    """Garante que alvos e controles mantem a mesma ordem entre arquivos."""
     freq_ref = arquivos[0]["freq_estim"]
     bins_ref = arquivos[0]["bins_m"]
     if len(np.unique(freq_ref)) != len(freq_ref):
         raise ValueError("freqEstim contem frequencias repetidas")
-    if np.any(np.isclose(freq_ref, bins_ref)):
-        raise ValueError("Um bin de ruido coincide com sua frequencia-alvo")
+    if len(np.unique(bins_ref)) != len(bins_ref):
+        raise ValueError("binsM contem frequencias repetidas")
+    if np.any(np.isclose(freq_ref[:, None], bins_ref[None, :])):
+        raise ValueError("Uma frequencia de controle coincide com um alvo")
 
     for arquivo in arquivos[1:]:
         if not np.array_equal(arquivo["freq_estim"], freq_ref):
@@ -167,23 +171,20 @@ def validar_correspondencia_frequencias(arquivos):
 # DETECTOR E DISCRETIZACAO
 # ============================================================
 
-def extrair_potencias_epocas(x, canal, fs, freq_alvo, freq_ruido):
-    """Extrai |FFT|^2 nos bins reais mais proximos, uma linha por epoca."""
+def localizar_bin_fft(n_amostras, fs, frequencia):
+    """Retorna o indice e a frequencia real do bin FFT mais proximo."""
+    frequencias_fft = np.fft.rfftfreq(n_amostras, d=1.0 / fs)
+    indice = int(np.argmin(np.abs(frequencias_fft - frequencia)))
+    return indice, float(frequencias_fft[indice])
+
+
+def extrair_coeficientes_epocas(x, canal, fs, freq_alvo):
+    """Extrai o coeficiente FFT complexo do alvo em cada epoca."""
     epocas = np.asarray(x[canal, :, :], dtype=float)
     n_amostras = epocas.shape[1]
-    frequencias_fft = np.fft.rfftfreq(n_amostras, d=1.0 / fs)
-    idx_alvo = int(np.argmin(np.abs(frequencias_fft - freq_alvo)))
-    idx_ruido = int(np.argmin(np.abs(frequencias_fft - freq_ruido)))
-    if idx_alvo == idx_ruido:
-        raise ValueError(
-            f"Resolucao espectral insuficiente: {freq_alvo} e {freq_ruido} Hz "
-            f"caem no mesmo bin ({frequencias_fft[idx_alvo]:g} Hz)"
-        )
-
+    idx_alvo, bin_alvo = localizar_bin_fft(n_amostras, fs, freq_alvo)
     espectro = np.fft.rfft(epocas, axis=1)
-    pot_alvo = np.abs(espectro[:, idx_alvo]) ** 2
-    pot_ruido = np.abs(espectro[:, idx_ruido]) ** 2
-    return pot_alvo, pot_ruido, frequencias_fft[idx_alvo], frequencias_fft[idx_ruido]
+    return espectro[:, idx_alvo], bin_alvo
 
 
 def injetar_tom_sintetico(x, canal, fs, freq_alvo, k):
@@ -197,36 +198,41 @@ def injetar_tom_sintetico(x, canal, fs, freq_alvo, k):
     return x_sintetico
 
 
-def calcular_f_janelas(pot_alvo, pot_ruido):
-    """Calcula uma razao de potencias para cada janela completa de epocas."""
-    n_epocas = len(pot_alvo)
+def calcular_msc_janelas(coeficientes):
+    """Calcula uma MSC entre epocas para cada janela completa."""
+    n_epocas = len(coeficientes)
     valores = []
     intervalos = []
     for inicio in range(0, n_epocas - WINDOW_SIZE_EPOCHS + 1, WINDOW_STEP_EPOCHS):
         fim = inicio + WINDOW_SIZE_EPOCHS
-        numerador = np.mean(pot_alvo[inicio:fim])
-        denominador = np.mean(pot_ruido[inicio:fim])
-        valores.append(numerador / (denominador + EPS))
+        janela = coeficientes[inicio:fim]
+        numerador = np.abs(np.sum(janela)) ** 2
+        denominador = WINDOW_SIZE_EPOCHS * np.sum(np.abs(janela) ** 2)
+        valor_msc = numerador / (denominador + EPS)
+        valores.append(float(np.clip(valor_msc, 0.0, 1.0)))
         intervalos.append((inicio, fim))
     return np.asarray(valores), intervalos
 
 
-def calcular_thresholds_f(n_epocas_janela, p_value_boundaries):
-    """Converte fronteiras de p-valor em quantis crescentes de F(2M, 2M)."""
-    graus_liberdade = 2 * n_epocas_janela
-    thresholds = distribuicao_f.isf(
+def calcular_thresholds_msc(n_epocas_janela, p_value_boundaries):
+    """Converte fronteiras de p-valor em quantis da Beta(1, M-1)."""
+    if n_epocas_janela < 2:
+        raise ValueError("A MSC requer pelo menos duas epocas por janela")
+    thresholds = distribuicao_msc.isf(
         np.asarray(p_value_boundaries, dtype=float),
-        graus_liberdade,
-        graus_liberdade,
+        1,
+        n_epocas_janela - 1,
     )
     if not np.all(np.isfinite(thresholds)) or np.any(np.diff(thresholds) <= 0):
         raise ValueError("As fronteiras de p-valor geraram thresholds degenerados")
     return thresholds
 
 
-def calcular_p_value(valor_f, n_epocas_janela):
-    graus_liberdade = 2 * n_epocas_janela
-    return float(distribuicao_f.sf(valor_f, graus_liberdade, graus_liberdade))
+def calcular_p_value_msc(valor_msc, n_epocas_janela):
+    """Calcula P(MSC >= valor | H0) pela distribuicao nula teorica."""
+    return float(
+        distribuicao_msc.sf(valor_msc, 1, n_epocas_janela - 1)
+    )
 
 
 def discretizar(valor, thresholds, labels):
@@ -272,9 +278,9 @@ def construir_matrizes_observacao(pasta_dados):
     arquivos = [carregar_mat(caminho) for caminho in caminhos]
     validar_correspondencia_frequencias(arquivos)
 
-    thresholds = calcular_thresholds_f(WINDOW_SIZE_EPOCHS, P_VALUE_BOUNDARIES)
-    f_critico = float(
-        calcular_thresholds_f(WINDOW_SIZE_EPOCHS, [SIGNIFICANCE_LEVEL])[0]
+    thresholds = calcular_thresholds_msc(WINDOW_SIZE_EPOCHS, P_VALUE_BOUNDARIES)
+    msc_critica = float(
+        calcular_thresholds_msc(WINDOW_SIZE_EPOCHS, [SIGNIFICANCE_LEVEL])[0]
     )
     matrizes_por_frequencia = {}
     valores_globais_ausente = []
@@ -287,24 +293,30 @@ def construir_matrizes_observacao(pasta_dados):
         registros = []
 
         for arquivo in arquivos:
-            freq_ruido = arquivo["bins_m"][indice_freq]
-            pot_alvo, pot_ruido, bin_alvo, bin_ruido = extrair_potencias_epocas(
-                arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo, freq_ruido
+            freq_controle = arquivo["bins_m"][indice_freq]
+            coeficientes, bin_alvo = extrair_coeficientes_epocas(
+                arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo
             )
-            f_ausente, intervalos = calcular_f_janelas(pot_alvo, pot_ruido)
+            _, bin_controle = localizar_bin_fft(
+                arquivo["x"].shape[2], arquivo["fs"], freq_controle
+            )
+            msc_ausente, intervalos = calcular_msc_janelas(coeficientes)
 
             x_sintetico = injetar_tom_sintetico(
                 arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo, K_SINTETICO
             )
-            pot_alvo_s, pot_ruido_s, _, _ = extrair_potencias_epocas(
-                x_sintetico, CHANNEL_INDEX, arquivo["fs"], freq_alvo, freq_ruido
+            coeficientes_s, _ = extrair_coeficientes_epocas(
+                x_sintetico, CHANNEL_INDEX, arquivo["fs"], freq_alvo
             )
-            f_presente, _ = calcular_f_janelas(pot_alvo_s, pot_ruido_s)
+            msc_presente, _ = calcular_msc_janelas(coeficientes_s)
 
-            valores_ausente.extend(f_ausente)
-            valores_presente.extend(f_presente)
+            valores_ausente.extend(msc_ausente)
+            valores_presente.extend(msc_presente)
 
-            for estado, valores in (("Ausente", f_ausente), ("Presente", f_presente)):
+            for estado, valores in (
+                ("Ausente", msc_ausente),
+                ("Presente", msc_presente),
+            ):
                 for valor, (inicio, fim) in zip(valores, intervalos):
                     registros.append(
                         {
@@ -312,15 +324,17 @@ def construir_matrizes_observacao(pasta_dados):
                             "condicao": arquivo["condicao"],
                             "canal": CHANNEL_INDEX,
                             "frequencia": float(freq_alvo),
-                            "frequencia_ruido": float(freq_ruido),
+                            "frequencia_controle": float(freq_controle),
                             "bin_fft_alvo": float(bin_alvo),
-                            "bin_fft_ruido": float(bin_ruido),
+                            "bin_fft_controle": float(bin_controle),
                             "epoca_inicio": inicio,
                             "epoca_fim_exclusivo": fim,
                             "fs": arquivo["fs"],
                             "estado_calibracao": estado,
-                            "valor_f": float(valor),
-                            "p_value": calcular_p_value(valor, WINDOW_SIZE_EPOCHS),
+                            "valor_msc": float(valor),
+                            "p_value": calcular_p_value_msc(
+                                valor, WINDOW_SIZE_EPOCHS
+                            ),
                             "label": discretizar(valor, thresholds, NIVEIS_OBSERVACAO),
                         }
                     )
@@ -341,9 +355,9 @@ def construir_matrizes_observacao(pasta_dados):
                 "Ausente": contagens_ausente,
                 "Presente": contagens_presente,
             },
-            "thresholds_f": thresholds.copy(),
+            "thresholds_msc": thresholds.copy(),
             "p_value_boundaries": list(P_VALUE_BOUNDARIES),
-            "f_critico": f_critico,
+            "msc_critica": msc_critica,
             "alpha": SIGNIFICANCE_LEVEL,
             "n_arquivos": len(arquivos),
             "n_janelas": len(valores_ausente),
@@ -367,9 +381,9 @@ def construir_matrizes_observacao(pasta_dados):
             "Ausente": contagens_globais_ausente,
             "Presente": contagens_globais_presente,
         },
-        "thresholds_f": thresholds.copy(),
+        "thresholds_msc": thresholds.copy(),
         "p_value_boundaries": list(P_VALUE_BOUNDARIES),
-        "f_critico": f_critico,
+        "msc_critica": msc_critica,
         "alpha": SIGNIFICANCE_LEVEL,
         "n_arquivos": len(arquivos),
         "n_frequencias": len(matrizes_por_frequencia),
@@ -384,10 +398,10 @@ def construir_matrizes_observacao(pasta_dados):
 
 
 def calcular_taxa_falso_positivo(dados, chave_n_janelas):
-    """Calcula a fracao de registros ESP acima do F critico configurado."""
+    """Calcula a fracao de registros ESP acima da MSC critica configurada."""
     falsos_positivos = sum(
         registro["estado_calibracao"] == "Ausente"
-        and registro["valor_f"] >= dados["f_critico"]
+        and registro["valor_msc"] >= dados["msc_critica"]
         for registro in dados["registros"]
     )
     return falsos_positivos / dados[chave_n_janelas]
@@ -430,6 +444,12 @@ def construir_tabela_para_salvar(resultados):
             "passo_janela_epocas": WINDOW_STEP_EPOCHS,
             "p_value_boundaries": list(P_VALUE_BOUNDARIES),
             "alpha": SIGNIFICANCE_LEVEL,
+            "distribuicao_nula": {
+                "nome": "Beta",
+                "parametro_a": 1,
+                "parametro_b": WINDOW_SIZE_EPOCHS - 1,
+            },
+            "uso_binsM": "controle_lateral; nao entra no calculo da MSC",
             "k_sintetico": K_SINTETICO,
             "smoothing": SMOOTHING,
         },
@@ -437,16 +457,17 @@ def construir_tabela_para_salvar(resultados):
             "n_arquivos": matriz_global["n_arquivos"],
             "n_frequencias": matriz_global["n_frequencias"],
             "n_janelas_por_estado": matriz_global["n_janelas_por_estado"],
-            "thresholds_f": matriz_global["thresholds_f"].tolist(),
-            "f_critico": matriz_global["f_critico"],
+            "thresholds_msc": matriz_global["thresholds_msc"].tolist(),
+            "msc_critica": matriz_global["msc_critica"],
             "taxa_falso_positivo_global_esp": calcular_taxa_falso_positivo(
                 matriz_global, "n_janelas_por_estado"
             ),
         },
         "diagnostico_por_frequencia": diagnosticos,
         "aviso": (
-            "A linha Presente usa injecao sintetica e nao representa "
-            "calibracao clinica validada."
+            "A linha Presente usa uma senoide sintetica coerente em fase, "
+            "sem jitter fisiologico, e nao representa calibracao clinica "
+            "validada."
         ),
     }
 
@@ -481,10 +502,10 @@ if __name__ == "__main__":
     )
 
     print("\n=== Matriz B global (frequencias agrupadas) ===")
-    print("Thresholds F:", matriz_global["thresholds_f"])
+    print("Thresholds MSC:", matriz_global["thresholds_msc"])
     print(
-        f"F critico (alpha={matriz_global['alpha']}): "
-        f"{matriz_global['f_critico']:.6f}; "
+        f"MSC critica (alpha={matriz_global['alpha']}): "
+        f"{matriz_global['msc_critica']:.6f}; "
         f"FP global observado em ESP: {taxa_fp_global:.2%}"
     )
     print(

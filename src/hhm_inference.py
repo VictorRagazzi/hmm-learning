@@ -2,10 +2,8 @@
 
 Este modulo NAO reimplementa o detector espectral. Ele importa diretamente de
 ``get_obs_matrix.py`` as mesmas funcoes usadas para calibrar a matriz B
-(``carregar_mat``, ``extrair_potencias_epocas``, ``calcular_f_janelas``,
-``calcular_thresholds_f``, ``discretizar``). Se o teste estatistico mudar la
-(por exemplo, trocar o teste F por outro detector), este script herda a
-mudanca automaticamente, sem precisar ser editado.
+(``carregar_mat``, ``extrair_coeficientes_epocas``, ``calcular_msc_janelas``,
+``calcular_thresholds_msc``, ``discretizar``).
 
 Fluxo:
 
@@ -17,10 +15,11 @@ Fluxo:
    diferentes nao devem ser concatenadas).
 3. Aplica uma regra de decisao (percentual minimo e/ou numero de janelas
    consecutivas em "Presente") sobre cada caminho de estados -> detectado_freq.
-4. Combina as 8 frequencias com uma regra k-de-N -> detectado_arquivo.
-5. Repete o mesmo pipeline sobre pares de frequencias "laterais" (bins de
-   binsM, sem estimulo esperado) para estimar a taxa de falso positivo
-   composta da mesma regra k-de-N, calibrada nos proprios arquivos com
+4. Trata cada frequencia como um experimento independente ao agregar a taxa de
+   deteccao (por exemplo, 1 frequencia detectada em 8 corresponde a 12,5%).
+5. Repete o mesmo pipeline diretamente nas frequencias laterais de ``binsM``,
+   onde nao ha estimulo esperado, para estimar a taxa de falso positivo
+   por frequencia, calibrada nos proprios arquivos com
    estimulo (usar so os ESP omitiria o efeito de qualquer artefato do
    estimulo/gravacao).
 6. Salva um relatorio consolidado e imprime as analises por nivel de dB e por
@@ -42,17 +41,19 @@ import numpy as np
 from get_obs_matrix import (
     CHANNEL_INDEX,
     DATA_DIR,
+    DETECTOR,
     ESTADOS,
     NIVEIS_OBSERVACAO,
     P_VALUE_BOUNDARIES,
     PI_INICIAL,
     WINDOW_SIZE_EPOCHS,
-    calcular_f_janelas,
-    calcular_p_value,
-    calcular_thresholds_f,
+    WINDOW_STEP_EPOCHS,
+    calcular_msc_janelas,
+    calcular_p_value_msc,
+    calcular_thresholds_msc,
     carregar_mat,
     discretizar,
-    extrair_potencias_epocas,
+    extrair_coeficientes_epocas,
 )
 
 # ============================================================
@@ -72,20 +73,9 @@ PRESENT_PATTERN = "*dB.mat"
 # MODO_REGRA_DECISAO combina os dois criterios: "OR" (qualquer um basta) ou
 # "AND" (os dois precisam valer). Use None em um dos limiares para
 # desativa-lo.
-MIN_CONSECUTIVE = 3
-MIN_PERCENT = 0.30
+MIN_CONSECUTIVE = 4
+MIN_PERCENT = 0.10
 MODO_REGRA_DECISAO = "OR"  # "OR" ou "AND"
-
-# --- Regra k-de-N entre as frequencias de estimulacao ---
-# Um arquivo e considerado "detectado" se pelo menos K_DE_N das frequencias
-# de estimulacao (de um total de N, tipicamente 8) forem detectadas pela
-# regra acima.
-K_DE_N = 2
-
-# Mesma regra k-de-N, aplicada as frequencias "laterais" (controle), para
-# estimar a taxa de falso positivo composta do metodo completo.
-K_DE_N_LATERAL = K_DE_N
-
 
 # ============================================================
 # CARREGAMENTO DE A E B JA CALIBRADAS
@@ -112,6 +102,31 @@ def carregar_matriz_observacao(caminho=OBS_MATRIX_FILE):
     estados = dados["estados_linhas"]
     labels = dados["labels_colunas"]
     matriz = np.asarray(dados["matriz"], dtype=float)
+    configuracao = dados.get("configuracao", {})
+    detector_arquivo = configuracao.get("detector")
+    if detector_arquivo != DETECTOR:
+        raise ValueError(
+            f"{caminho}: detector {detector_arquivo!r} difere de {DETECTOR!r}; "
+            "regenere a matriz B antes da inferencia"
+        )
+    if configuracao.get("tamanho_janela_epocas") != WINDOW_SIZE_EPOCHS:
+        raise ValueError(
+            f"{caminho}: tamanho de janela difere do codigo; regenere a matriz B"
+        )
+    if configuracao.get("passo_janela_epocas") != WINDOW_STEP_EPOCHS:
+        raise ValueError(
+            f"{caminho}: passo de janela difere do codigo; regenere a matriz B"
+        )
+    fronteiras_arquivo = configuracao.get("p_value_boundaries")
+    if (
+        fronteiras_arquivo is None
+        or len(fronteiras_arquivo) != len(P_VALUE_BOUNDARIES)
+        or not np.allclose(fronteiras_arquivo, P_VALUE_BOUNDARIES)
+    ):
+        raise ValueError(
+            f"{caminho}: fronteiras de p-valor diferem do codigo; "
+            "regenere a matriz B"
+        )
     if list(estados) != list(ESTADOS):
         raise ValueError(
             f"Ordem de estados em {caminho} ({estados}) difere de ESTADOS "
@@ -163,17 +178,22 @@ def viterbi(sequencia_labels, matriz_a, matriz_b, pi_inicial, estados, labels):
 
 
 # ============================================================
-# SEQUENCIA DE OBSERVACOES PARA UM PAR (ALVO, RUIDO)
+# SEQUENCIA DE OBSERVACOES PARA UMA FREQUENCIA
 # ============================================================
 
-def construir_sequencia_labels(x, canal, fs, freq_alvo, freq_ruido, thresholds):
+def construir_sequencia_labels(x, canal, fs, frequencia, thresholds):
     """Reusa exatamente o detector de get_obs_matrix.py para gerar labels."""
-    pot_alvo, pot_ruido, _, _ = extrair_potencias_epocas(
-        x, canal, fs, freq_alvo, freq_ruido
-    )
-    valores_f, _ = calcular_f_janelas(pot_alvo, pot_ruido)
-    labels = [discretizar(v, thresholds, NIVEIS_OBSERVACAO) for v in valores_f]
-    return labels, valores_f
+    coeficientes, _ = extrair_coeficientes_epocas(x, canal, fs, frequencia)
+    valores_msc, intervalos = calcular_msc_janelas(coeficientes)
+    labels = [
+        discretizar(valor, thresholds, NIVEIS_OBSERVACAO)
+        for valor in valores_msc
+    ]
+    p_values = [
+        calcular_p_value_msc(valor, WINDOW_SIZE_EPOCHS)
+        for valor in valores_msc
+    ]
+    return labels, valores_msc, p_values, intervalos
 
 
 # ============================================================
@@ -251,24 +271,6 @@ def parse_nome_arquivo(caminho):
 
 
 # ============================================================
-# PARES LATERAIS (CONTROLE) PARA ESTIMAR FALSO POSITIVO COMPOSTO
-# ============================================================
-
-def construir_pares_laterais(bins_m):
-    """Cria pares (pseudo-alvo, pseudo-ruido) a partir de binsM.
-
-    binsM[i] ja e usado como denominador (ruido) do teste em freqEstim[i], e
-    portanto nao pode ser reaproveitado como par (binsM[i], binsM[i]). Aqui
-    cada binsM[i] vira um pseudo-alvo testado contra o proximo bin de
-    controle (circular), evitando reusar o mesmo par numerador/denominador
-    ja consumido na calibracao de B. Isso NAO tem estimulo esperado em
-    nenhum dos dois lados, servindo como controle de falso positivo.
-    """
-    n = len(bins_m)
-    return [(bins_m[i], bins_m[(i + 1) % n]) for i in range(n)]
-
-
-# ============================================================
 # PROCESSAMENTO DE UM ARQUIVO
 # ============================================================
 
@@ -276,20 +278,21 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
     """Roda Viterbi + regra de decisao nas frequencias de estimulo e laterais."""
     freq_estim = arquivo["freq_estim"]
     bins_m = arquivo["bins_m"]
-    pares_laterais = construir_pares_laterais(bins_m)
 
     resultado_por_frequencia = {}
-    for freq_alvo, freq_ruido in zip(freq_estim, bins_m):
-        labels, valores_f = construir_sequencia_labels(
-            arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo, freq_ruido,
-            thresholds,
+    for freq_alvo, freq_controle in zip(freq_estim, bins_m):
+        labels, valores_msc, p_values, intervalos = construir_sequencia_labels(
+            arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo, thresholds
         )
         caminho = viterbi(labels, matriz_a, matriz_b, PI_INICIAL, ESTADOS,
                            NIVEIS_OBSERVACAO)
         avaliacao = avaliar_caminho(caminho)
         resultado_por_frequencia[float(freq_alvo)] = {
-            "freq_ruido": float(freq_ruido),
+            "frequencia_controle_associada": float(freq_controle),
             "labels": labels,
+            "valores_msc": valores_msc.tolist(),
+            "p_values": p_values,
+            "intervalos_epocas": [list(intervalo) for intervalo in intervalos],
             "caminho_estados": caminho,
             **avaliacao,
         }
@@ -297,20 +300,20 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
     n_detectadas = sum(
         r["detectado"] for r in resultado_por_frequencia.values()
     )
-    detectado_arquivo = n_detectadas >= K_DE_N
-
     resultado_lateral = {}
-    for pseudo_alvo, pseudo_ruido in pares_laterais:
-        labels, valores_f = construir_sequencia_labels(
-            arquivo["x"], CHANNEL_INDEX, arquivo["fs"], pseudo_alvo,
-            pseudo_ruido, thresholds,
+    for frequencia_lateral in bins_m:
+        labels, valores_msc, p_values, intervalos = construir_sequencia_labels(
+            arquivo["x"], CHANNEL_INDEX, arquivo["fs"], frequencia_lateral,
+            thresholds,
         )
         caminho = viterbi(labels, matriz_a, matriz_b, PI_INICIAL, ESTADOS,
                            NIVEIS_OBSERVACAO)
         avaliacao = avaliar_caminho(caminho)
-        resultado_lateral[float(pseudo_alvo)] = {
-            "pseudo_ruido": float(pseudo_ruido),
+        resultado_lateral[float(frequencia_lateral)] = {
             "labels": labels,
+            "valores_msc": valores_msc.tolist(),
+            "p_values": p_values,
+            "intervalos_epocas": [list(intervalo) for intervalo in intervalos],
             "caminho_estados": caminho,
             **avaliacao,
         }
@@ -318,17 +321,13 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
     n_detectadas_lateral = sum(
         r["detectado"] for r in resultado_lateral.values()
     )
-    falso_positivo_arquivo = n_detectadas_lateral >= K_DE_N_LATERAL
-
     return {
         "por_frequencia_estimulo": resultado_por_frequencia,
         "n_frequencias_detectadas": n_detectadas,
         "n_frequencias_total": len(resultado_por_frequencia),
-        "detectado_arquivo": detectado_arquivo,
         "por_frequencia_lateral": resultado_lateral,
         "n_lateral_detectadas": n_detectadas_lateral,
         "n_lateral_total": len(resultado_lateral),
-        "falso_positivo_arquivo": falso_positivo_arquivo,
     }
 
 
@@ -339,7 +338,7 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
 def rodar_inferencia(pasta_dados=DATA_DIR):
     matriz_a = carregar_matriz_transicao()
     matriz_b = carregar_matriz_observacao()
-    thresholds = calcular_thresholds_f(WINDOW_SIZE_EPOCHS, P_VALUE_BOUNDARIES)
+    thresholds = calcular_thresholds_msc(WINDOW_SIZE_EPOCHS, P_VALUE_BOUNDARIES)
 
     caminhos = sorted(glob.glob(os.path.join(pasta_dados, PRESENT_PATTERN)))
     if not caminhos:
@@ -393,15 +392,23 @@ def carregar_mat_generico(caminho):
 def analisar_por_nivel_db(resultados_arquivos):
     grupos = defaultdict(list)
     for r in resultados_arquivos:
-        grupos[r["nivel_db"]].append(r["detectado_arquivo"])
+        grupos[r["nivel_db"]].append(r)
 
     analise = {}
     for nivel_db in sorted(grupos):
-        deteccoes = grupos[nivel_db]
+        registros = grupos[nivel_db]
+        n_frequencias = sum(r["n_frequencias_total"] for r in registros)
+        n_detectados = sum(r["n_frequencias_detectadas"] for r in registros)
+        n_laterais = sum(r["n_lateral_total"] for r in registros)
+        n_falsos_positivos = sum(r["n_lateral_detectadas"] for r in registros)
         analise[nivel_db] = {
-            "n_arquivos": len(deteccoes),
-            "n_detectados": sum(deteccoes),
-            "taxa_deteccao": sum(deteccoes) / len(deteccoes),
+            "n_arquivos": len(registros),
+            "n_frequencias_estimulo": n_frequencias,
+            "n_frequencias_estimulo_detectadas": n_detectados,
+            "taxa_deteccao": n_detectados / n_frequencias,
+            "n_frequencias_laterais": n_laterais,
+            "n_frequencias_laterais_detectadas": n_falsos_positivos,
+            "taxa_falso_positivo_lateral": n_falsos_positivos / n_laterais,
         }
     return analise
 
@@ -420,12 +427,10 @@ def analisar_por_participante(resultados_arquivos):
                 {
                     "arquivo": os.path.basename(r["arquivo"]),
                     "nivel_db": r["nivel_db"],
-                    "detectado_estimulo": r["detectado_arquivo"],
                     "n_frequencias_estimulo_detectadas": (
                         f"{r['n_frequencias_detectadas']}/"
                         f"{r['n_frequencias_total']}"
                     ),
-                    "falso_positivo_lateral": r["falso_positivo_arquivo"],
                     "n_frequencias_laterais_detectadas": (
                         f"{r['n_lateral_detectadas']}/{r['n_lateral_total']}"
                     ),
@@ -433,11 +438,11 @@ def analisar_por_participante(resultados_arquivos):
                 for r in registros
             ],
             "taxa_deteccao_estimulo": sum(
-                r["detectado_arquivo"] for r in registros
-            ) / len(registros),
+                r["n_frequencias_detectadas"] for r in registros
+            ) / sum(r["n_frequencias_total"] for r in registros),
             "taxa_falso_positivo_lateral": sum(
-                r["falso_positivo_arquivo"] for r in registros
-            ) / len(registros),
+                r["n_lateral_detectadas"] for r in registros
+            ) / sum(r["n_lateral_total"] for r in registros),
         }
     return analise
 
@@ -446,26 +451,29 @@ def construir_relatorio(resultados_arquivos):
     por_nivel = analisar_por_nivel_db(resultados_arquivos)
     por_participante = analisar_por_participante(resultados_arquivos)
 
-    taxa_deteccao_global = sum(
-        r["detectado_arquivo"] for r in resultados_arquivos
-    ) / len(resultados_arquivos)
-    taxa_falso_positivo_global = sum(
-        r["falso_positivo_arquivo"] for r in resultados_arquivos
-    ) / len(resultados_arquivos)
+    total_frequencias = sum(r["n_frequencias_total"] for r in resultados_arquivos)
+    total_detectadas = sum(r["n_frequencias_detectadas"] for r in resultados_arquivos)
+    total_laterais = sum(r["n_lateral_total"] for r in resultados_arquivos)
+    total_falsos_positivos = sum(r["n_lateral_detectadas"] for r in resultados_arquivos)
 
     return {
         "nome": "relatorio_inferencia_hmm",
         "configuracao": {
+            "detector": DETECTOR,
+            "tamanho_janela_epocas": WINDOW_SIZE_EPOCHS,
+            "passo_janela_epocas": WINDOW_STEP_EPOCHS,
             "min_consecutive": MIN_CONSECUTIVE,
             "min_percent": MIN_PERCENT,
             "modo_regra_decisao": MODO_REGRA_DECISAO,
-            "k_de_n": K_DE_N,
-            "k_de_n_lateral": K_DE_N_LATERAL,
         },
         "resumo_global": {
             "n_arquivos": len(resultados_arquivos),
-            "taxa_deteccao_estimulo": taxa_deteccao_global,
-            "taxa_falso_positivo_lateral": taxa_falso_positivo_global,
+            "n_frequencias_estimulo": total_frequencias,
+            "n_frequencias_estimulo_detectadas": total_detectadas,
+            "taxa_deteccao_estimulo": total_detectadas / total_frequencias,
+            "n_frequencias_laterais": total_laterais,
+            "n_frequencias_laterais_detectadas": total_falsos_positivos,
+            "taxa_falso_positivo_lateral": total_falsos_positivos / total_laterais,
         },
         "por_nivel_db": {
             str(nivel): dados for nivel, dados in por_nivel.items()
@@ -476,10 +484,8 @@ def construir_relatorio(resultados_arquivos):
                 "arquivo": os.path.basename(r["arquivo"]),
                 "participante": r["participante"],
                 "nivel_db": r["nivel_db"],
-                "detectado_arquivo": r["detectado_arquivo"],
                 "n_frequencias_detectadas": r["n_frequencias_detectadas"],
                 "n_frequencias_total": r["n_frequencias_total"],
-                "falso_positivo_arquivo": r["falso_positivo_arquivo"],
                 "n_lateral_detectadas": r["n_lateral_detectadas"],
                 "n_lateral_total": r["n_lateral_total"],
                 "por_frequencia_estimulo": {
@@ -505,8 +511,8 @@ def construir_relatorio(resultados_arquivos):
         ],
         "aviso": (
             "Analise exploratoria. A e heuristica de persistencia, "
-            "B(Presente) usa injecao sintetica, e os limiares k-de-N / "
-            "consecutivos ainda nao foram validados clinicamente."
+            "B(Presente) usa injecao sintetica, e os limiares por frequencia "
+            "ainda nao foram validados clinicamente."
         ),
     }
 
@@ -529,8 +535,7 @@ def imprimir_relatorio(relatorio):
     print(
         f"MIN_CONSECUTIVE={cfg['min_consecutive']}  "
         f"MIN_PERCENT={cfg['min_percent']}  "
-        f"MODO={cfg['modo_regra_decisao']}  "
-        f"K_DE_N={cfg['k_de_n']}  K_DE_N_LATERAL={cfg['k_de_n_lateral']}"
+        f"MODO={cfg['modo_regra_decisao']}"
     )
 
     resumo = relatorio["resumo_global"]
@@ -545,7 +550,12 @@ def imprimir_relatorio(relatorio):
     for nivel, dados in relatorio["por_nivel_db"].items():
         print(
             f"  {nivel:>4} dB: {dados['taxa_deteccao']:.2%} "
-            f"({dados['n_detectados']}/{dados['n_arquivos']} arquivos)"
+            f"({dados['n_frequencias_estimulo_detectadas']}/"
+            f"{dados['n_frequencias_estimulo']} frequencias)  |  "
+            f"falso positivo lateral: "
+            f"{dados['taxa_falso_positivo_lateral']:.2%} "
+            f"({dados['n_frequencias_laterais_detectadas']}/"
+            f"{dados['n_frequencias_laterais']} frequencias)"
         )
 
     print("\n=== DETECCAO POR PARTICIPANTE (estimulo vs. lateral/ruido) ===")
@@ -557,12 +567,12 @@ def imprimir_relatorio(relatorio):
         )
         for item in dados["detalhe_por_arquivo"]:
             nivel = item["nivel_db"]
+            contagem_estimulo = item["n_frequencias_estimulo_detectadas"]
+            contagem_lateral = item["n_frequencias_laterais_detectadas"]
             print(
                 f"    {item['arquivo']:20} nivel={nivel:>4} dB  "
-                f"estimulo: {'DETECTADO' if item['detectado_estimulo'] else '-- '} "
-                f"({item['n_frequencias_estimulo_detectadas']})   "
-                f"lateral: {'FALSO-POS' if item['falso_positivo_lateral'] else '-- '} "
-                f"({item['n_frequencias_laterais_detectadas']})"
+                f"estimulo: {contagem_estimulo:>3}   "
+                f"lateral: {contagem_lateral:>3}"
             )
 
 

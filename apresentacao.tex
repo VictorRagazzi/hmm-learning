@@ -1,414 +1,395 @@
 \documentclass{beamer}
-\newcommand\Wider[2][3em]{%
-\makebox[\linewidth][c]{%
-  \begin{minipage}{\dimexpr\textwidth+#1\relax}
-  \raggedright#2
-  \end{minipage}%
-  }%
-}
-\usepackage{tikz}
-\usetikzlibrary{shapes,positioning,arrows.meta,fit,backgrounds}
-\usepackage{multicol}
-\usepackage{amssymb}
+
+\usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{graphicx}
-\usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
 \usetheme{default}
 \setbeamertemplate{navigation symbols}{}
- 
-% ---- colors for node status ----
-\definecolor{colCurrent}{RGB}{245,166,35}   % orange = being processed now
-\definecolor{colDone}{RGB}{200,200,200}     % gray   = already processed (offline phase only)
-\definecolor{colPending}{RGB}{255,255,255}  % white  = not processed yet
-\definecolor{colTrue}{RGB}{140,200,140}     % green  = resolved via table lookup
-\definecolor{colFalse}{RGB}{225,120,120}    % red
 
+\definecolor{colSignal}{RGB}{41,98,155}
+\definecolor{colEvidence}{RGB}{245,166,35}
+\definecolor{colAbsent}{RGB}{200,200,200}
+\definecolor{colPresent}{RGB}{140,200,140}
+\definecolor{colControl}{RGB}{225,120,120}
 
+\tikzset{
+  flowbox/.style={draw,thick,rounded corners=2pt,minimum height=0.9cm,
+    minimum width=1.9cm,align=center},
+  state/.style={draw,thick,circle,minimum size=1.55cm,align=center},
+  arrow/.style={-{Latex[length=2.4mm]},thick}
+} 
 
 \begin{document}
 
-\title{Detecção de ASSR em EEG via Redes Ocultas de Markov}
-\author{Victor Ragazzi\\[2em]
-Tiago Zanotelli\\
-}
-\date{ELT 610 - 21 de Setembro de 2026}
+\title{Detec\c{c}\~ao de ASSR em EEG com um Modelo Oculto de Markov}
+\subtitle{Uma aplica\c{c}\~ao de processamento de sinais}
+\author{Victor Ragazzi\\[1.2em]Tiago Zanotelli}
+\date{ELT 610 -- Setembro de 2026}
 \frame{\titlepage}
 
-%% ===================================================================
-%% S2 -- Outline
-\frame
-{\frametitle{\LARGE Resumo da apresentação}
+% ====================================================================
+\begin{frame}{Vis\~ao geral}
 \Large
-\begin{itemize}
-    \item 01. Objetivo e contexto
-    \item 02. Estados e observações
-    \item 03. Janelamento do sinal
-    \item 04. Cálculo da evidência estatística -- \textcolor{red}{CSM}
-    \item 05. Treinamento da \textcolor{blue}{HMM}
-    \item 06. Inferência usando a \textcolor{blue}{HMM}
-    \item 07. Critérios de detecção
-    \item 08. Resumo
-\end{itemize}
-}
+\begin{enumerate}
+  \item O problema: encontrar uma resposta auditiva no EEG
+  \item Do sinal a uma evid\^encia espectral
+  \item Da evid\^encia a uma sequ\^encia de observa\c{c}\~oes
+  \item Como o HMM acrescenta contexto temporal
+  \item Limites desta proposta
+\end{enumerate}
 
-\frame
-{\frametitle{\LARGE 1. Objetivos e contexto}
-\Large
+% \vfill
+% \begin{block}{Objetivo da apresenta\c{c}\~ao}
+% Mostrar a ideia central do m\'etodo. As tabelas apresentadas s\~ao apenas
+% estruturas ou exemplos did\'aticos, n\~ao resultados experimentais.
+% \end{block}
+\end{frame}
 
-O problema, detectar resposta cerebral a um estímulo auditivo
-
-\begin{itemize}
-    \item EEG contínuo + estímulo auditivo periódico;
-    \item O cérebro sincroniza com o estímulo?
-    \item Abordagem proposta: medir sincronia de fase nas frequências de estímulo por \textcolor{red}{CSM} e incorporar sua evolução temporal em uma HMM
-\end{itemize}
-
-\note{
-Aqui a gente só contextualiza o problema, sem entrar em detalhes de implementação ainda.
-
-O ASSR (Auditory Steady-State Response) é uma resposta cerebral evocada por um estímulo auditivo que se repete periodicamente (por exemplo, um tom modulado em amplitude a 40 Hz). Se o cérebro está processando esse estímulo, uma parte da atividade elétrica registrada no EEG passa a oscilar sincronizada com a frequência de modulação do estímulo.
-
-O problema que queremos resolver é: dado um trecho de EEG gravado durante a estimulação, como decidir, de forma objetiva e automática, se existe ou não essa resposta sincronizada?
-
-A abordagem clássica mede o grau de sincronia de fase entre as épocas do sinal nas frequências de estímulo e compara esse valor a um limiar estatístico. A CSM será usada como evidência observada, mas a decisão considerará também a persistência temporal dessa evidência.
-
-O método que vamos apresentar hoje usa essa mesma ideia de sincronia de fase como \emph{evidência} instante a instante, mas incorpora essa evidência dentro de uma máquina de estados ao longo do tempo, em vez de tomar uma decisão única sobre o sinal inteiro. Isso é o que veremos a partir do próximo slide.
-}
-}
-
-%% ===================================================================
-%% S4 -- 2. Estados e observações
-\frame
-{\frametitle{\LARGE 2. Estados e observações}
+% ====================================================================
+\begin{frame}{1. O problema de sinais}
 \Large
 
+\vspace{0.35cm}
 \begin{itemize}
-    \item Ao longo do tempo, o sistema está em um de \textbf{2 estados}: \textit{repouso} ou \textit{resposta}
-    \item A cada janela, chega uma \textbf{observação}: o nível de evidência estatística:
-    
-    \begin{itemize}
-        \item Ausente, baixo, médio, forte e muito forte;
-    \end{itemize}
-    \item A quantidade de níveis é configurável; a HMM recebe apenas o símbolo ordinal, não o valor contínuo
-\end{itemize}
-}
-
-\frame
-{\frametitle{\LARGE Como funciona uma HMM: exemplo prático}
-\footnotesize
- 
-\begin{center}
-\begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    state/.style={draw, circle, minimum size=1.5cm, align=center, thick},
-    obs/.style={draw, rectangle, rounded corners=1pt, minimum height=0.8cm, minimum width=2.6cm, align=center}
-]
-    % hidden states (not observed directly)
-    \node[state, colDone, fill=colDone!30] (E) at (0,3.6) {Repouso\\(oculto)};
-    \node[state, colDone, fill=colDone!30] (C) at (5.5,3.6) {Resposta\\(oculto)};
- 
-    % self loops
-    \draw[->,thick] (E) to[out=150,in=210,looseness=6] node[left]{0.7} (E);
-    \draw[->,thick] (C) to[out=30,in=-30,looseness=6] node[right]{0.6} (C);
- 
-    % transitions
-    \draw[->,thick] (E) to[bend left=15] node[above]{0.3} (C);
-    \draw[->,thick] (C) to[bend left=15] node[below]{0.4} (E);
- 
-    % observations (what we actually measure), aligned under each state
-    \node[obs, colCurrent, fill=colCurrent!30] (O1) at (0,0) {\normalsize$\checkmark$\\ CSM -- forte};
-    \node[obs, colCurrent, fill=colCurrent!30] (O2) at (5.5,0) {\normalsize$\times$\\ CSM -- baixa};
- 
-    % emissions (dashed) -- straight edges = "own" observation, crossed = "other"
-    \draw[->,dashed] (E) -- node[left,pos=0.5]{0.1} (O1);
-    \draw[->,dashed] (C) -- node[right,pos=0.5]{0.2} (O2);
-    \draw[->,dashed] (E) -- node[above,pos=0.32,sloped]{0.9} (O2);
-    \draw[->,dashed] (C) -- node[above,pos=0.32,sloped]{0.8} (O1);
-\end{tikzpicture}
-\end{center}
- 
-\vspace{0.1cm}
-Sequência observada: \ $\times \times \times \checkmark \checkmark$ \\
-Estados ocultos inferidos: \textbf{Repouso, Repouso, Repouso, Repouso,} \textcolor{blue}{Resposta}
- 
-\note{
-Esse slide mostra, com um exemplo concreto e bem conhecido da literatura, como uma HMM funciona de verdade -- antes de voltarmos para o nosso método no próximo slide.
- 
-A ideia clássica: imaginem que vocês estão trancados numa sala sem janelas, e querem saber se está chovendo lá fora. Vocês não conseguem observar o clima diretamente -- por isso ele é chamado de \emph{estado oculto}. O que vocês conseguem observar é uma pista indireta: se a pessoa que entra na sala está carregando um guarda-chuva ou não.
- 
-Nesse exemplo, temos 2 estados ocultos possíveis para o clima -- Ensolarado ou Chuvoso -- que mudam de um dia para o outro seguindo probabilidades fixas: por exemplo, se hoje está ensolarado, a chance de continuar ensolarado amanhã é 70\%, e a chance de virar chuvoso é 30\%; se hoje está chuvoso, a chance de continuar chuvoso é 60\%, e a chance de abrir o sol é 40\%. Essas são as chamadas probabilidades de \emph{transição} -- e a propriedade de Markov diz que essa probabilidade do dia seguinte só depende do estado de hoje, não do histórico inteiro antes disso.
- 
-O que vocês realmente enxergam -- a observação -- é se a pessoa trouxe guarda-chuva ou não, e essa observação também é probabilística: se está ensolarado, é raro (10\%) a pessoa levar guarda-chuva; se está chuvoso, é bem provável (80\%). Essas são as chamadas probabilidades de \emph{emissão}: a chance de cada observação, dado o estado oculto.
- 
-Juntando as duas coisas -- transição entre estados e emissão de observações -- dá para observar uma sequência de guarda-chuva/sem-guarda-chuva ao longo de vários dias, e usar um algoritmo (como o Viterbi, mencionado no slide anterior) para inferir qual é a sequência de estados ocultos (o clima) mais provável que gerou aquelas observações. No exemplo do slide, uma sequência de observações ``guarda-chuva, guarda-chuva, sem guarda-chuva, guarda-chuva'' tende a apontar para um clima majoritariamente chuvoso, com um dia de sol no meio.
- 
-Agora fazendo a ponte com o nosso problema: no lugar de ``Ensolarado/Chuvoso'', temos ``repouso/resposta''; no lugar de ``guarda-chuva/sem guarda-chuva'', temos o nível de evidência CSM discretizado. A matriz de emissão será calibrada uma vez a partir de ruído simulado e de uma heurística de inversão. Com essa matriz fixa, as probabilidades de transição serão estimadas a partir das sequências observadas.
-}
-}
-
-
-
-%% ===================================================================
-%% S5 -- 3. Janelamento do sinal
-\frame
-{\frametitle{\LARGE 3. Janelamento do sinal}
-\Large
-
-\begin{itemize}
-    \item EEG contínuo dividido em \textbf{janelas deslizantes}
-    \item Cada janela contém $N$ épocas do estímulo
-    \item O passo entre janelas consecutivas é de $M$ épocas ($M \le N$)
-    \item Resultado: uma \textbf{sequência ordenada} de janelas, cada uma gerando 1 observação
+  \item O EEG tem baixa rela\c{c}\~ao sinal--ru\'ido;
+  \item a resposta de interesse est\'a em frequ\^encias conhecidas;
+  \item buscamos evidência/observação espectral que tamb\'em seja persistente no tempo.
 \end{itemize}
 
 \begin{center}
-\begin{tikzpicture}[scale=0.62, every node/.style={font=\footnotesize}]
-    % epoch timeline
-    \foreach \i in {0,...,13} {
-        \draw[thick] (\i*0.7,0) rectangle ++(0.7,0.6);
-    }
-    \node[anchor=west] at (14*0.7+0.2,0.3) {\ldots\ tempo (épocas)};
-
-    % window 1 (N=6 epochs), step M=2
-    \draw[thick, colTrue, line width=1.2pt] (0,1.1) rectangle ++(6*0.7,0.6);
-    \node[colTrue] at (3*0.7,1.4) {janela $t{-}1$ ($N{=}6$)};
-
-    \draw[thick, colCurrent, line width=1.2pt] (2*0.7,1.9) rectangle ++(6*0.7,0.6);
-    \node[colCurrent] at (5*0.7,2.2) {janela $t$};
-
-
-    \draw[thick, colFalse, line width=1.2pt] (4*0.7,2.7) rectangle ++(6*0.7,0.6);
-    \node[colFalse] at (7*0.7,3.0) {janela $t{+}1$};
-
-    \draw[<->, thick] (0,-0.4) -- (2*0.7,-0.4);
-    \node[anchor=north] at (0.7,-0.4) {passo $M{=}2$};
+\begin{tikzpicture}[x=0.4cm,y=0.54cm]
+  \draw[->] (0,0) -- (18.4,0) node[right] {tempo};
+  \draw[->] (0,-1.4) -- (0,1.5) node[above] {EEG};
+  \draw[colSignal,thick,samples=180,domain=0:18]
+    plot (\x,{0.50*sin(105*\x)+0.25*sin(245*\x)+0.13*sin(510*\x)++0.1*sin(800*\x)++0.1*sin(100*\x)});
+  \draw[colEvidence,very thick,samples=180,domain=0:18]
+    plot (\x,{0.50*sin(105*\x)});
+  \node[anchor=west,colEvidence] at (12.2,1.08) {componente sincronizada};
 \end{tikzpicture}
 \end{center}
-}
+\end{frame}
 
-%% ===================================================================
-%% S6 -- 4. Cálculo da evidência estatística (CSM) -- técnico
-\frame
-{\frametitle{\LARGE 4. Evidência estatística por janela -- CSM}
-\Large
+% ====================================================================
+\begin{frame}{2. Usar um HMM?}
+\large
+ORD diz: \emph{``quanta evid\^encia existe nesta
+janela?''} \\
+O HMM: \emph{``essa evid\^encia forma uma evolu\c{c}\~ao
+temporal?''}
+
+\begin{center}
+\begin{tikzpicture}[node distance=3cm]
+  \node[state,fill=colAbsent!45] (A) {ASSR\\ausente};
+  \node[state,fill=colPresent!55,right=of A] (P) {ASSR\\presente};
+  \draw[arrow] (A) to[bend left=18] node[above] {$A_{AP}$} (P);
+  \draw[arrow] (P) to[bend left=18] node[below] {$A_{PA}$} (A);
+  \draw[arrow] (A) to[out=150,in=210,looseness=5] node[left] {$A_{AA}$} (A);
+  \draw[arrow] (P) to[out=30,in=-30,looseness=5] node[right] {$A_{PP}$} (P);
+  \node[flowbox,fill=colEvidence!25,below=1cm of A] (OA)
+    {label ORD\\observado};
+  \node[flowbox,fill=colEvidence!25,below=1cm of P] (OP)
+    {label ORD\\observado};
+  \draw[arrow,dashed] (A) -- node[left] {$B$} (OA);
+  \draw[arrow,dashed] (P) -- node[right] {$B$} (OP);
+\end{tikzpicture}
+\end{center}
 
 \begin{itemize}
-    \item Para cada época $k$, extrai-se pela FFT a fase $\theta_k(f)$ nas frequências de interesse
-    \item \textbf{Component Synchrony Measure}:
-    $$\mathrm{CSM}(f) = \left|\frac{1}{K}\sum_{k=1}^{K}e^{j\theta_k(f)}\right|^2$$
-    \item Calcula-se um \textbf{único valor por janela}, agregando frequências e canais
-    \item A distribuição observada é dividida em $L$ categorias ordinais; $L$ acompanha automaticamente a lista de níveis definida no experimento
+  \item Os estados s\~ao ocultos; observamos apenas evid\^encias;
+  \item O pr\'oximo estado depende apenas do estado atual.
 \end{itemize}
-}
+\end{frame}
 
-\frame
-{\frametitle{\LARGE A CSM é intercambiável}
+% ====================================================================
+\begin{frame}{3. Organiza\c{c}\~ao do EEG}
 \Large
+O sinal de cada canal \`e organizado em \textbf{\'epocas} e analisado por
+\textbf{janelas deslizantes}.
 
-\begin{block}{Observação importante}
-A \textcolor{red}{CSM} é a evidência escolhida aqui, mas \textbf{não é a única opção}: o restante do método não depende de como a evidência é calculada.
+\begin{center}
+\begin{tikzpicture}[scale=0.73,every node/.style={font=\small}]
+  \foreach \i in {0,...,13} {
+    \draw[thick] (\i*0.7,0) rectangle ++(0.7,0.62);
+  }
+  \node[anchor=west] at (10.0,0.31) {$\ldots$ tempo};
+  \draw[colPresent,very thick] (0,1.15) rectangle ++(4.2,0.65);
+  \node[colPresent!55!black] at (2.1,1.48) {janela $t-1$};
+  \draw[colEvidence,very thick] (1.4,2.00) rectangle ++(4.2,0.65);
+  \node[colEvidence!70!black] at (3.5,2.33) {janela $t$};
+  \draw[colControl,very thick] (2.8,2.85) rectangle ++(4.2,0.65);
+  \node[colControl!75!black] at (4.9,3.18) {janela $t+1$};
+  \draw[<->,thick] (0,-0.52) -- (1.4,-0.52);
+  \node[anchor=north] at (0.7,-0.52) {passo};
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+  \item Cada janela re\'une v\'arias realiza\c{c}\~oes do mesmo experimento;
+  \item a sobreposi\c{c}\~ao melhora a resolu\c{c}\~ao temporal, mas cria
+  depend\^encia entre janelas vizinhas.
+\end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{4. Evid\^encia espectral: MSC}
+\large
+Para cada \`epoca $m$, a FFT fornece o coeficiente complexo $X_m(f_0)$ na
+frequ\^encia de interesse $f_0$.
+
+\begin{block}{Magnitude quadr\'atica da coer\^encia entre \`epocas}
+\[
+\mathrm{MSC}(f_0)=
+\frac{\left|\displaystyle\sum_{m=1}^{M}X_m(f_0)\right|^2}
+     {M\displaystyle\sum_{m=1}^{M}|X_m(f_0)|^2}
+\]
 \end{block}
 
-\vspace{0.3cm}
-\begin{itemize}
-    \item Pode-se trocar a CSM por \textbf{outro detector} (ex.: MSC, PLV ou teste $F$ espectral);
-    \item Pode-se \textbf{fundir vários detectores} (usá-los como observações simultâneas/combinadas);
-    \item Em ambos os casos, a estrutura da HMM (estados, matrizes probabilísticas e inferência) \textbf{não muda} -- só muda de onde vem a observação.
-\end{itemize}
+\begin{columns}[T]
+\column{0.48\textwidth}
+\centering
+\textbf{Fases dispersas}\\[0.15cm]
+\begin{tikzpicture}[scale=0.75]
+  \draw[->] (-1.3,0) -- (1.3,0);
+  \draw[->] (0,-1.3) -- (0,1.3);
+  \foreach \a in {20,105,185,265,320} {
+    \draw[-{Latex[length=2mm]},colControl,thick] (0,0) -- (\a:1.05);
+  }
+\end{tikzpicture}\\[-0.1cm]
+MSC tende a ser menor
 
-\note{
-Vale reforçar esse ponto verbalmente na apresentação: a CSM entra no modelo apenas como fonte da \emph{observação} discretizada em cada janela. A HMM só enxerga níveis ordinais de evidência; de onde esses níveis vêm é intercambiável.
+\column{0.48\textwidth}
+\centering
+\textbf{Fases alinhadas}\\[0.15cm]
+\begin{tikzpicture}[scale=0.75]
+  \draw[->] (-1.3,0) -- (1.3,0);
+  \draw[->] (0,-1.3) -- (0,1.3);
+  \foreach \a in {8,18,25,31,40} {
+    \draw[-{Latex[length=2mm]},colPresent!55!black,thick]
+      (0,0) -- (\a:1.05);
+  }
+\end{tikzpicture}\\[-0.1cm]
+MSC tende a ser maior
+\end{columns}
 
-Isso mostra a modularidade da proposta: se a CSM se mostrar insuficiente, pode-se substituí-la por outro estimador ou fundir detectores antes da discretização, mantendo a mesma estrutura temporal.
-}
-}
+\note{A MSC combina magnitude e consist\^encia de fase entre as \`epocas. Ela
+n\~ao \`e CSM: na CSM, cada coeficiente seria normalizado para m\'odulo unit\'ario
+antes da soma.}
+\end{frame}
 
-
-%% ===================================================================
-%% S7 -- 5. Treinamento da HMM
-\frame
-{\frametitle{\LARGE 5. Parametrização da HMM}
+% ====================================================================
+\begin{frame}{O teste espectral n\~ao \`e o ponto central}
 \large
 
-\begin{itemize}
-    \item Distribuição inicial fixa:
-    $$\boldsymbol{\pi} = [P(\textit{repouso}),P(\textit{resposta})] \approx [0{,}95,0{,}05]$$
-    \item Uma matriz de transição \textbf{compartilhada} entre condições:
-    $$A_{ij}=P(S_t=j\mid S_{t-1}=i)$$
-    \item Uma matriz de emissão \textbf{fixa e compartilhada}:
-    $$B_{j\ell}=P(O_t=\ell\mid S_t=j)$$
-    \item $B$ será calibrada uma vez com ruído e inversão normalizada; somente $A$ será ajustada aos dados reais
-\end{itemize}
-}
+\begin{block}{A MSC \`e uma escolha, n\~ao uma restri\c{c}\~ao do modelo}
+O HMM precisa de uma sequ\^encia de evid\^encias ao longo do tempo, mas essa
+evid\^encia n\~ao precisa vir exclusivamente da MSC.
+\end{block}
 
-\frame
-{\frametitle{\LARGE Calibração de $B$: repouso}
+\begin{itemize}
+  \item Podemos trocar a MSC por outro teste que seja mais adequado aos dados;
+  \item tamb\'em podemos combinar testes complementares, se isso produzir uma
+  evid\^encia mais robusta;
+
+\end{itemize}
+
+\vfill
+\centering
+\textbf{Detector espectral} $\longrightarrow$ \textbf{evid\^encia observada}
+$\longrightarrow$ \textbf{HMM}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{5. ORD $\rightarrow$ Observa\c{c}\~ao}
 \large
-\begin{itemize}
-    \item Gerar blocos de ruído branco gaussiano, com a geometria de uma gravação de referência
-    \item Aplicar o mesmo pré-processamento, janelamento e cálculo de CSM dos dados reais
-    \item Discretizar usando os mesmos cortes por quantis definidos no conjunto de treinamento
-    \item Contar as janelas em cada nível e adicionar pseudo-contagem $\alpha>0$:
-    $$B_{\mathrm{rest},\ell} =
-      \frac{n_\ell+\alpha}{\sum_{m=1}^{L}n_m+L\alpha}$$
-    \item Registrar semente, número de simulações, amostragem, canais e parâmetros de janelamento
-\end{itemize}
-}
-
-\frame
-{\frametitle{\LARGE Calibração de $B$: resposta}
-\large
-\begin{itemize}
-    \item Construir a linha de resposta por uma \textbf{heurística de inversão normalizada}:
-    $$B_{\mathrm{response},\ell} =
-      \frac{1/B_{\mathrm{rest},\ell}}
-      {\sum_{m=1}^{L}1/B_{\mathrm{rest},m}}$$
-    \item A pseudo-contagem garante que a inversão seja definida
-    \item Níveis raros sob ruído recebem maior peso; isso pode incluir níveis baixos de CSM
-    \item A regra não representa uma distribuição fisiológica de resposta estimada experimentalmente
-    \item Um único $B$ será usado em 70, 50, 30 dB e ESP
-\end{itemize}
-\note{
-A distribuição simulada usa ruído independente entre amostras e canais.
-Ela é uma hipótese de referência, não uma reprodução completa do EEG em repouso.
-Os cortes dependem dos dados de treinamento; portanto, a calibração não é
-inteiramente independente dos dados reais. Trocar os cortes ou o processamento
-exige recalibrar B. A inversão não garante crescimento monotônico com a CSM.
-}
-}
-
-\frame
-{\frametitle{\LARGE Treinamento não supervisionado de $A$}
-\large
-\begin{itemize}
-    \item $\pi$ e $B$ permanecerão fixos durante todo o treinamento
-    \item Forward--backward calcula as probabilidades das transições ocultas; o passo de reestimação atualiza \textbf{somente $A$}
-    \item As transições esperadas serão somadas entre pacientes e condições, preservando as fronteiras de cada sequência
-    \item Não serão necessários rótulos temporais nem máscaras de estímulo para inicializar $B$
-    \item Pseudo-contagens regularizam $A$; múltiplos restarts perturbam apenas sua inicialização
-    \item Será escolhida a solução de maior log-verossimilhança final
-\end{itemize}
-\note{
-A inicialização de A favorece persistência nos estados. O protocolo não fixa
-o instante de uma transição neural. As intensidades identificam sequências
-independentes, mas não selecionam matrizes de emissão diferentes.
-Com pseudo-contagens, o objetivo regularizado difere da verossimilhança pura;
-esta última será usada para comparar os resultados finais dos restarts.
-}
-}
-
-
-%% ===================================================================
-%% S8 -- 6. Inferência usando a HMM
-\frame
-{\frametitle{\LARGE 6. Inferência: algoritmo de Viterbi}
-\Large
-
-\begin{itemize}
-    \item Entrada: sequência de observações discretizadas, uma por janela
-    \item Objetivo: encontrar a sequência de estados ocultos \textbf{mais provável} que explica essa sequência
-    \item Viterbi = programação dinâmica que, a cada passo, combina:
-    \begin{itemize}
-        \item a probabilidade de emissão $B$ do nível CSM observado;
-        \item a probabilidade de transição compartilhada em $A$;
-    \end{itemize}
-    \item Resultado: uma sequência repouso/resposta que considera a evidência e as probabilidades de transição
-\end{itemize}
-}
-
-\frame
-{\frametitle{\LARGE Ilustração: treliça de Viterbi}
-\footnotesize
+Sob a hip\'otese de aus\^encia de resposta, a MSC possui uma distribui\c{c}\~ao
+nula conhecida para uma janela com $M$ \`epocas:
+\[
+  \mathrm{MSC}\mid H_0 \sim \mathrm{Beta}(1,M-1).
+\]
+O valor de MSC \`e convertido em um $p$-valor e depois em um s\'imbolo ordinal:
 
 \begin{center}
-\begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    st/.style={draw, circle, minimum size=1.0cm, align=center, thick}
-]
-    \foreach \t/\lab in {0/t-1, 1/t, 2/t+1} {
-        \node[st, colDone, fill=colDone!30] (R\t) at (3*\t,2) {Repouso};
-        \node[st, colCurrent, fill=colCurrent!30] (S\t) at (3*\t,0) {Resposta};
-        \node[anchor=north] at (3*\t,-0.9) {janela $\lab$};
-    }
-
-    % all possible transitions (thin)
-    \draw[->, thin, gray] (R0) -- (R1);
-    \draw[->, thin, gray] (R0) -- (S1);
-    \draw[->, thin, gray] (S0) -- (R1);
-    \draw[->, thin, gray] (S0) -- (S1);
-    \draw[->, thin, gray] (R1) -- (R2);
-    \draw[->, thin, gray] (R1) -- (S2);
-    \draw[->, thin, gray] (S1) -- (R2);
-    \draw[->, thin, gray] (S1) -- (S2);
-
-    % highlighted most-likely path
-    \draw[->, thick, colTrue, line width=1.6pt] (R0) -- (R1);
-    \draw[->, thick, colTrue, line width=1.6pt] (R1) -- (S2);
+\begin{tikzpicture}[every node/.style={font=\small}]
+  \foreach \x/\w/\cor/\rotulo in {
+    0/2.3/colAbsent/muito baixo,
+    2.3/2.3/colSignal!35/baixo,
+    4.6/2.3/colEvidence!45/m\'edio,
+    6.9/2.3/colEvidence!75/alto,
+    9.2/2.3/colControl!75/muito alto} {
+    \filldraw[fill=\cor,draw=white] (\x,0) rectangle ++(\w,0.95);
+    \node at (\x+1.15,0.48) {\rotulo};
+  }
+  \draw[->,thick] (0,-0.28) -- (11.75,-0.28) node[right] {evid\^encia};
 \end{tikzpicture}
 \end{center}
 
-\vspace{0.2cm}
-\Large
-Em \textcolor{colTrue!70!black}{\textbf{verde}}: caminho de maior verossimilhança encontrado pelo Viterbi (o que reportamos como estado inferido em cada janela)
-
-\note{
-Esse slide dá uma imagem mental de como o Viterbi escolhe o caminho entre todas as combinações possíveis de estados ao longo do tempo. A recursão combina $A_{ij}$ com a matriz de emissão compartilhada e fixa, $B_j(o_t)$. O treinamento e a inferência são etapas separadas: Baum--Welch estima somente $A$; Viterbi usa os parâmetros fixos para decodificar uma sequência.
-}
-}
-
-
-%% ===================================================================
-%% S9 -- 7. Critérios de detecção
-\frame
-{\frametitle{\LARGE 7. Critérios de detecção final}
-\large
-
-Depois de obter o caminho de estados inferido, ainda falta decidir: \textbf{houve ASSR ou não?}
-
 \begin{itemize}
-    \item Critério de persistência: exigir um número mínimo de detecções \textcolor{red}{consecutivas} e/ou uma proporção \textcolor{red}{mínima} de janelas em \textit{resposta}
-    \item \textbf{Bandas de controle}: repetir todo o pipeline (janelamento + CSM + HMM) em frequências vizinhas, onde não há estímulo
-    \begin{itemize}
-        \item Representa uma condição onde não se espera resposta ao estímulo
-        \item Usar os mesmos cortes, $B$ e $A$, sem novo ajuste; medir estados e sequências de resposta espúria
-    \end{itemize}
-    \item Comparação com o método clássico: esperamos taxa de falso positivo comparável, com potencial ganho de robustez temporal
+  \item Os cortes v\^em de faixas de $p$-valor da distribui\c{c}\~ao te\'orica;
+  \item o HMM recebe a sequ\^encia de labels, n\~ao o EEG bruto;
+  \item frequ\^encias laterais s\~ao preservadas como controle do detector.
 \end{itemize}
+\end{frame}
 
-\note{
-Os limiares do critério final devem ser definidos antes da avaliação e tratados como hiperparâmetros. Exemplos são exigir pelo menos $X$ janelas consecutivas ou uma proporção mínima $Y$ de janelas no estado de resposta.
-
-A ideia das bandas de controle é aplicar o mesmo processamento em frequências onde não se espera resposta neural. A taxa de estados ou sequências classificados como resposta funciona como diagnóstico de sobreajuste a ruído. Esse diagnóstico deve ser reportado, e não usado para corrigir silenciosamente o modelo.
-}
-}
-
-
-%% ===================================================================
-%% S12 -- 8. Resumo / fechamento
-\frame
-{\frametitle{\LARGE 8. Resumo: fluxo completo}
-\footnotesize
+% ====================================================================
+\begin{frame}{5.1 Como os labels s\~ao obtidos}
+\small
 
 \begin{center}
-\resizebox{0.98\textwidth}{!}{%
-\begin{tikzpicture}[
-    every node/.style={font=\tiny, align=center},
-    box/.style={draw, thick, minimum width=1.45cm, minimum height=0.95cm, text width=1.25cm, rounded corners=1pt}
-]
-    \node[box] (sig) at (0,0) {Sinal EEG};
-    \node[box, right=0.08cm of sig] (win) {Janelamento ($N$, passo $M$)};
-    \node[box, right=0.08cm of win] (ev) {CSM agregada na banda};
-    \node[box, right=0.08cm of ev] (disc) {Discretização ($L$ níveis)};
-    \node[box, right=0.08cm of disc] (train) {Baum--Welch: apenas $A$};
-    \node[box, right=0.08cm of train, colCurrent, fill=colCurrent!30] (tab) {Viterbi: caminho mais provável};
-    \node[box, right=0.08cm of tab, colTrue, fill=colTrue!30] (dec) {Decisão final};
+  \includegraphics[width=0.94\textwidth]{figs/ord_distribuicao_nula.png}
+\end{center}
 
-    \draw[->,thick] (sig) -- (win);
-    \draw[->,thick] (win) -- (ev);
-    \draw[->,thick] (ev) -- (disc);
-    \draw[->,thick] (disc) -- (train);
-    \draw[->,thick] (train) -- (tab);
-    \draw[->,thick] (tab) -- (dec);
+\vspace{-0.25cm}
+Para cada MSC observada, calculamos a \textbf{\'area de cauda} sob $H_0$:
+\[
+  p=P_{H_0}(\mathrm{MSC}\geq \mathrm{MSC}_{obs}).
+\]
+O intervalo que cont\'em esse $p$-valor determina o label emitido para o HMM.
+Valores mais \`a direita s\~ao menos prov\'aveis sob $H_0$ e recebem labels de
+maior evid\^encia.
+\end{frame}
+
+% ====================================================================
+\begin{frame}{5.2 Como constru\'imos exemplos com resposta}
+\small
+
+\begin{center}
+  \includegraphics[width=0.9\textwidth]{figs/injecao_resposta_sintetica.png}
+\end{center}
+
+\begin{center}
+  \includegraphics[width=0.9\textwidth]{figs/distribuicao_ord_presente.png}
+\end{center}
+
+\end{frame}
+
+% ====================================================================
+\begin{frame}{6. As duas tabelas do modelo}
+\large
+\begin{columns}[T]
+\column{0.47\textwidth}
+\textbf{Transi\c{c}\~ao $A$}\\[0.15cm]
+\scriptsize
+\begin{tabular}{lcc}
+\toprule
+Estado atual & Ausente & Presente \\
+\midrule
+Ausente  & $a_{AA}$ & $a_{AP}$ \\
+Presente & $a_{PA}$ & $a_{PP}$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.25cm}
+\normalsize
+Representa a persist\^encia ou a mudan\c{c}a do estado entre duas janelas.
+
+\column{0.51\textwidth}
+\textbf{Emiss\~ao $B$}\\[0.15cm]
+\scriptsize
+\begin{tabular}{lcccc}
+\toprule
+Estado & muito baixo & baixo & $\cdots$ & alto \\
+\midrule
+Ausente  & $b_{A1}$ & $b_{A2}$ & $\cdots$ & $b_{AL}$ \\
+Presente & $b_{P1}$ & $b_{P2}$ & $\cdots$ & $b_{PL}$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.25cm}
+\normalsize
+Representa a chance de observar cada n\'ivel de MSC em cada estado.
+\end{columns}
+
+\vspace{0.45cm}
+\begin{alertblock}{Apenas um exemplo de estrutura}
+As letras acima n\~ao s\~ao resultados. Cada linha de uma matriz probabil\'istica
+deve somar 1.
+\end{alertblock}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{7. Como as tabelas s\~ao constru\'idas}
+\normalsize
+\begin{columns}[T]
+\column{0.49\textwidth}
+\begin{block}{Matriz de emiss\~ao $B$}
+\begin{itemize}
+  \item \textbf{Ausente}: histogramas de labels em grava\c{c}\~oes sem est\'imulo;
+  \item \textbf{Presente}: os mesmos sinais com uma senoide coerente de pequena
+  amplitude, apenas como cen\'ario sint\'etico;
+  \item as contagens das frequ\^encias s\~ao reunidas e normalizadas.
+\end{itemize}
+\end{block}
+
+\column{0.49\textwidth}
+\begin{block}{Matriz de transi\c{c}\~ao $A$}
+\begin{itemize}
+  \item Cada grava\c{c}\~ao contribui com perman\^encias dentro de seu estado;
+  \item uma sa\'ida impl\'icita evita perman\^encia igual a 100\%;
+  \item a tabela expressa dura\c{c}\~ao induzida pelas grava\c{c}\~oes e pelo
+  janelamento.
+\end{itemize}
+\end{block}
+\end{columns}
+
+\begin{alertblock}{Interpreta\c{c}\~ao correta}
+Esta parametriza\c{c}\~ao \`e explorat\'oria: n\~ao \`e Baum--Welch, n\~ao representa
+transi\c{c}\~oes fisiol\'ogicas observadas e n\~ao produz probabilidades cl\'inicas
+validadas.
+\end{alertblock}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{8. Da sequ\^encia ao caminho mais prov\'avel}
+\large
+Para cada frequ\^encia, o algoritmo de Viterbi combina a observa\c{c}\~ao atual
+com as probabilidades de emiss\~ao e transi\c{c}\~ao.
+
+\begin{center}
+\begin{tikzpicture}[x=2.2cm,y=1.35cm,every node/.style={font=\scriptsize}]
+  \foreach \t/\n/\obs in {0/1/baixo,1/2/m\'edio,2/3/alto,3/4/alto} {
+    \node[state,minimum size=1.02cm,fill=colAbsent!40] (A\t) at (\t,1)
+      {Ausente};
+    \node[state,minimum size=1.02cm,fill=colPresent!45] (P\t) at (\t,0)
+      {Presente};
+    \node at (\t,-0.82) {$o_{\n}$: \obs};
+  }
+  \foreach \t/\u in {0/1,1/2,2/3} {
+    \draw[->,thin,gray] (A\t) -- (A\u);
+    \draw[->,thin,gray] (A\t) -- (P\u);
+    \draw[->,thin,gray] (P\t) -- (A\u);
+    \draw[->,thin,gray] (P\t) -- (P\u);
+  }
+  \draw[arrow,colSignal,line width=1.3pt] (A0) -- (A1);
+  \draw[arrow,colSignal,line width=1.3pt] (A1) -- (P2);
+  \draw[arrow,colSignal,line width=1.3pt] (P2) -- (P3);
+\end{tikzpicture}
+\end{center}
+
+O caminho destacado \`e somente uma \textbf{ilustra\c{c}\~ao}. A infer\^encia \`e
+feita separadamente para cada sequ\^encia; participantes, condi\c{c}\~oes e
+frequ\^encias n\~ao s\~ao concatenados.
+\end{frame}
+
+% ====================================================================
+\begin{frame}{9. Fluxo completo da proposta}
+\small
+\begin{center}
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[node distance=0.28cm]
+  \node[flowbox,fill=colSignal!15] (sig) {EEG em\\\'epocas};
+  \node[flowbox,right=of sig] (win) {Janelas\\deslizantes};
+  \node[flowbox,right=of win,fill=colEvidence!20] (fft) {FFT e MSC\\em $f_0$};
+  \node[flowbox,right=of fft] (lab) {$p$-valor e\\label ordinal};
+  \node[flowbox,right=of lab,fill=colPresent!30] (hmm) {HMM e\\Viterbi};
+  \node[flowbox,right=of hmm] (path) {Caminho de\\estados};
+  \draw[arrow] (sig) -- (win);
+  \draw[arrow] (win) -- (fft);
+  \draw[arrow] (fft) -- (lab);
+  \draw[arrow] (lab) -- (hmm);
+  \draw[arrow] (hmm) -- (path);
 \end{tikzpicture}%
 }
 \end{center}
@@ -416,13 +397,45 @@ A ideia das bandas de controle é aplicar o mesmo processamento em frequências 
 \vspace{0.4cm}
 \Large
 \begin{itemize}
-    \item $\pi$ e $B$ fixos e compartilhados; somente $A$ estimada por \textbf{Baum--Welch}
-    \item $B$: ruído gaussiano para repouso e inversão normalizada para resposta
-    \item Caminho de estados calculado posteriormente via \textbf{Viterbi}
-    \item Bandas de controle $\Rightarrow$ \textbf{taxa de falso positivo estimada} do método
-    \item \textbf{Modularidade}: CSM pode ser trocada por outro detector, ou vários detectores podem ser fundidos, sem alterar a estrutura da HMM
+  \item A FFT isola a componente de interesse;
+  \item a ORD mede nível de evidência em cada janela;
+  \item o teste estat\'istico transforma a medida em evid\^encia ordinal;
+  \item o HMM organiza essa evid\^encia ao longo do tempo.
+\end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{10. Mensagem final}
+\Large
+\begin{block}{Ideia central}
+O detector espectral fornece evid\^encia local; o HMM funciona como uma camada
+temporal que favorece sequ\^encias coerentes de estados.
+\end{block}
+
+\begin{itemize}
+  \item A contribui\c{c}\~ao para a disciplina est\'a no janelamento, FFT,
+  coer\^encia e teste estat\'istico;
+  \item o HMM \`e apresentado como uma aplica\c{c}\~ao simples dessas medidas;
+  \item a configura\c{c}\~ao atual serve para estudo metodol\'ogico;
+  \item qualquer uso cl\'inico exigiria calibra\c{c}\~ao e valida\c{c}\~ao
+  independentes.
 \end{itemize}
 
+\vfill
+\centering
+\large Nenhum valor desta apresenta\c{c}\~ao deve ser interpretado como
+resultado cl\'inico.
+\end{frame}
+
+\frame
+{\frametitle{\LARGE 11. Referências}
+\large
+
+\begin{itemize}
+    \item Heintz, Francart e Bertrand (2025) — “Post-processing of EEG-based Auditory Attention Decoding Decisions via Hidden Markov Models”
+    \item Yao et al. (2026) — “Sample-level EEG-based Selective Auditory Attention Decoding with Markov Switching Models”
+    \item Antunes, Zanotelli e Felix (2019) — “Automated detection of auditory response: applying sequential detection strategies with constant significance level to magnitude-squared coherence”
+\end{itemize}
 }
 
 \end{document}

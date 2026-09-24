@@ -4,7 +4,7 @@
 
 Antes de alterar o processamento de EEG, `src/get_obs_matrix.py` ou
 `src/get_tran_matrix.py`, leia por
-completo [docs/CONTEXTO_GET_OBS_MATRIX.md](docs/CONTEXTO_GET_OBS_MATRIX.md).
+completo [docs/CONTEXTO_GET_MATRIX.md](docs/CONTEXTO_GET_MATRIX.md).
 Esse documento é a referência técnica do estado atual, fórmulas, dados,
 resultados, limitações e comandos de verificação.
 
@@ -29,10 +29,11 @@ clínicas validadas.
 - EEG: `x` no formato `(canais, épocas, amostras)`; leia `Fs`, `freqEstim` e
   `binsM` de cada arquivo.
 - Canal configurável: `CHANNEL_INDEX`.
-- Detector: razão de potências por janela entre `freqEstim[i]` e `binsM[i]`.
-- Com `M` épocas por janela, usa-se aproximadamente `F(2M, 2M)` sob H0.
+- Detector: magnitude quadrática da coerência (MSC) entre épocas em
+  `freqEstim[i]`; `binsM` é controle lateral, não denominador.
+- Com `M` épocas por janela, usa-se `Beta(1, M-1)` sob H0.
 - Configuração atual: janela de 10 épocas, passo 5, cinco labels e `alpha=0.05`.
-- Thresholds: quantis teóricos da distribuição F definidos por faixas de
+- Thresholds: quantis teóricos da distribuição Beta definidos por faixas de
   p-valor; não são quantis empíricos dos dados ESP.
 - `B(Ausente)`: histograma das janelas ESP.
 - `B(Presente)`: mesmas janelas ESP após senoide com amplitude
@@ -48,7 +49,7 @@ clínicas validadas.
 - Ao executar os scripts, grave as tabelas em `results/observation_matrix.json`
   e `results/transition_matrix.json`.
 
-A estatística atual não é MSC nem CSM e não deve receber esses nomes.
+A estatística atual é MSC; ela não é CSM nem teste F espectral local.
 
 ## Decisões que não devem ser revertidas silenciosamente
 
@@ -60,8 +61,8 @@ A estatística atual não é MSC nem CSM e não deve receber esses nomes.
 - Não associe `K_SINTETICO` diretamente a dB acústicos.
 - Não use estímulos reais para ajustar thresholds e avaliar o mesmo ajuste como
   se fosse validação independente.
-- Se o detector, número de bins de ruído, canais ou forma de agregação mudar,
-  reveja a distribuição F e seus graus de liberdade.
+- Se o detector, número de épocas, canais ou forma de agregação mudar, reveja
+  a distribuição nula da MSC.
 - Não descreva a matriz A atual como resultado de Baum–Welch, transições reais
   observadas ou persistência fisiológica validada.
 - Mantenha tamanho e passo das janelas consistentes nos dois scripts, salvo
@@ -70,7 +71,8 @@ A estatística atual não é MSC nem CSM e não deve receber esses nomes.
 ## Metadados e validação
 
 Preserve nos resultados intermediários participante, condição, canal,
-frequência, bin de ruído, intervalo de épocas, `Fs`, valor F, p-valor e label.
+frequência, bin de controle, intervalo de épocas, `Fs`, valor MSC, p-valor e
+label.
 
 Depois de alterações, execute:
 

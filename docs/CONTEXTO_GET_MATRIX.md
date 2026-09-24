@@ -27,7 +27,7 @@ As tabelas tratadas nesta etapa são:
 
 Os dois scripts de parametrização estimam as tabelas offline e gravam artefatos
 JSON em `results/`. O script `hhm_inference.py` consome esses artefatos, executa
-Viterbi e aplica regras heurísticas de decisão por frequência e por arquivo.
+Viterbi e aplica uma regra heurística de decisão a cada frequência.
 Isso não constitui treinamento adicional nem decisão clínica final.
 
 As estimativas atuais incluem hipóteses heurísticas e uma resposta sintética.
@@ -113,33 +113,32 @@ mesmos sinais.
 
 ### 4.2 Detector espectral
 
-Para cada época `m`, canal configurado e frequência, são extraídas as potências:
+Para cada época `m`, canal configurado e frequência-alvo, extrai-se o
+coeficiente FFT complexo `X_m(f_alvo)`. Para uma janela com `M` épocas, a
+magnitude quadrática da coerência (MSC) é:
 
 ```text
-P_alvo(m)  = |X_m(f_alvo)|²
-P_ruido(m) = |X_m(f_ruido)|²
+MSC = |soma_m X_m(f_alvo)|² / (M * soma_m |X_m(f_alvo)|²)
 ```
 
-`f_alvo` vem de `freqEstim` e `f_ruido` do elemento correspondente de `binsM`.
-Para uma janela com `M` épocas, calcula-se:
+A MSC pertence a `[0, 1]` e usa magnitude e consistência de fase entre épocas.
+Ela não é CSM, que normalizaria cada coeficiente para módulo unitário antes da
+soma, nem é o teste F espectral local usado anteriormente.
+
+Sob ausência de resposta, coeficientes complexos gaussianos circulares e
+épocas independentes, o código usa:
 
 ```text
-F = média(P_alvo) / média(P_ruido)
+MSC ~ Beta(1, M - 1)
 ```
 
-Sob ausência de resposta, coeficientes aproximadamente gaussianos e
-independentes e piso espectral localmente plano, o código usa a aproximação:
+Com 10 épocas, a distribuição nula é `Beta(1, 9)`. Isso pressupõe que as épocas
+preservem uma referência de fase comum em relação ao estímulo. `binsM` continua
+sendo lido, validado e preservado como metadado e controle lateral, mas não é
+denominador da MSC.
 
-```text
-F ~ F(2M, 2M)
-```
-
-Com 10 épocas, os graus de liberdade são `(20, 20)`. A estatística é uma razão
-local de potências com referência F. Ela não é MSC nem CSM e não deve receber
-esses nomes.
-
-Se forem alterados número de bins de ruído, canais, agregação ou detector, os
-graus de liberdade e a distribuição nula precisam ser derivados novamente.
+Se forem alterados número de épocas, canais, agregação ou detector, a
+distribuição nula precisa ser derivada novamente.
 
 ### 4.3 Discretização
 
@@ -153,12 +152,12 @@ P_VALUE_BOUNDARIES = [0.50, 0.10, 0.05, 0.01]
 SIGNIFICANCE_LEVEL = 0.05
 ```
 
-Os thresholds são quantis teóricos da distribuição F, e não quantis empíricos
+Os thresholds são quantis teóricos da distribuição Beta, e não quantis empíricos
 dos dados ESP. Para janelas de 10 épocas:
 
 ```text
-Thresholds F = [1.00000000, 1.79384331, 2.12415521, 2.93773528]
-F crítico para alpha=0.05 = 2.124155
+Thresholds MSC = [0.07412529, 0.22573632, 0.28312884, 0.40051575]
+MSC crítica para alpha=0.05 = 0.283129
 ```
 
 | Label | Faixa de p-valor |
@@ -177,7 +176,7 @@ que o número de labels.
 O programa:
 
 1. lê todos os arquivos `*ESP.mat`;
-2. calcula o valor F de cada janela e frequência;
+2. calcula o valor MSC de cada janela e frequência;
 3. converte cada valor em um label;
 4. soma as contagens das oito frequências;
 5. aplica pseudocontagem `SMOOTHING = 0.5` por célula;
@@ -202,6 +201,11 @@ tom(t) = K_SINTETICO * std(época) * sin(2*pi*f_alvo*t)
 O valor atual é `K_SINTETICO = 0.01`. Depois da injeção, aplica-se exatamente o
 mesmo detector e os mesmos thresholds.
 
+A senoide reinicia com a mesma fase em todas as épocas e, portanto, representa
+uma resposta sintética coerente em fase. Ela não modela jitter de fase,
+variabilidade fisiológica de latência nem perda de sincronismo entre épocas;
+isso pode tornar `B(Presente)` otimista para um detector de coerência.
+
 Não há equivalência estabelecida entre `K_SINTETICO` e nível acústico em dB.
 Essa linha não é uma distribuição fisiológica validada e não deve ser usada
 como validação independente, pois parte dos mesmos arquivos usados em Ausente.
@@ -221,7 +225,7 @@ O JSON contém:
 - `probabilidades`: a mesma tabela indexada por nomes;
 - contagens antes da normalização;
 - configuração do detector e da injeção;
-- thresholds, valor crítico e quantidade de dados;
+- thresholds MSC, MSC crítica e quantidade de dados;
 - falso positivo global em ESP;
 - diagnóstico e contagens por frequência;
 - aviso sobre a natureza sintética de `B(Presente)`.
@@ -300,20 +304,16 @@ O JSON contém:
 
 ### 6.1 Matriz de emissão B
 
-Com 11 arquivos ESP, oito frequências, janela 10, passo 5 e pseudocontagem 0.5:
-
-```text
-2232 janelas por estado
-FP global observado em ESP = 5.06%
-```
+Com 11 arquivos ESP, oito frequências, janela 10, passo 5 e pseudocontagem 0,5,
+foram obtidas 2232 janelas por estado e falso positivo global de 4,08%:
 
 | Estado | muito_baixo | baixo | medio | alto | muito_alto |
 |---|---:|---:|---:|---:|---:|
-| Ausente | 0.51399 | 0.37659 | 0.05840 | 0.04095 | 0.01007 |
-| Presente | 0.31305 | 0.37525 | 0.09420 | 0.09734 | 0.12016 |
+| Ausente | 0,503692 | 0,414634 | 0,040501 | 0,035578 | 0,005594 |
+| Presente | 0,135825 | 0,321996 | 0,110316 | 0,180577 | 0,251287 |
 
-O falso positivo por frequência varia; 83 Hz apresentou 10.04%, embora a taxa
-global tenha ficado próxima de 5%. Preserve esse diagnóstico.
+O falso positivo por frequência foi: 81 Hz 2,51%; 83 Hz 5,38%; 85 Hz 4,66%;
+87 Hz 5,38%; 89 Hz 4,30%; 91 Hz 2,15%; 93 Hz 2,87%; e 95 Hz 5,38%.
 
 ### 6.2 Matriz de transição A
 
@@ -396,115 +396,99 @@ O Viterbi opera em log-espaço para evitar underflow e retorna o caminho mais
 provável entre os estados `Ausente` e `Presente`.
 
 O detector não é reimplementado. O programa importa de `get_obs_matrix.py` a
-leitura dos `.mat`, extração de potência, cálculo da razão F por janela,
-thresholds e discretização. Assim, cada sequência usa:
+leitura dos `.mat`, extração dos coeficientes FFT complexos, cálculo da MSC por
+janela, thresholds e discretização. Assim, cada sequência usa:
 
 ```text
-F = média(P_freqEstim[i]) / média(P_binsM[i])
+MSC = |soma_m X_m(freqEstim[i])|² /
+      (M * soma_m |X_m(freqEstim[i])|²)
 ```
 
 com janela de 10 épocas, passo 5 e os cinco labels da matriz B.
 
-### 9.2 Decisão por frequência e por arquivo
+### 9.2 Decisão e agregação por frequência
 
 A configuração atual é:
 
 ```python
-MIN_CONSECUTIVE = 3
-MIN_PERCENT = 0.30
+MIN_CONSECUTIVE = 4
+MIN_PERCENT = 0.10
 MODO_REGRA_DECISAO = "OR"
-K_DE_N = 2
-K_DE_N_LATERAL = 2
 ```
 
-Uma frequência é detectada quando o caminho Viterbi possui pelo menos 30% das
-janelas em `Presente` **ou** pelo menos três janelas `Presente` consecutivas.
-O valor vigente é três, não cinco. Um arquivo é detectado quando pelo menos
-duas de suas oito frequências satisfazem essa regra (`2-de-8`).
+Uma frequência é detectada quando o caminho Viterbi possui pelo menos 10% das
+janelas em `Presente` **ou** pelo menos quatro janelas `Presente` consecutivas.
+Cada frequência é um
+experimento independente na agregação: se uma das oito frequências de um
+arquivo for detectada, esse arquivo contribui com `1/8 = 12,5%` para a taxa,
+sem uma decisão intermediária `k-de-N` por arquivo.
 
 Como as janelas se sobrepõem, três janelas consecutivas, com tamanho 10 e passo
 5, cobrem 20 épocas únicas e não são três observações independentes. Os
-limiares de 30%, três consecutivas e 2-de-8 são escolhas heurísticas ainda não
-validadas.
+limiares por frequência são escolhas heurísticas ainda não validadas.
 
 ### 9.3 Falso positivo pelas frequências laterais
 
-O controle lateral usa somente os valores de `binsM` e cria pares circulares:
+O controle lateral aplica a MSC diretamente em cada frequência de `binsM`:
 
 ```text
-(82, 84), (84, 86), (86, 88), (88, 90),
-(90, 92), (92, 94), (94, 96), (96, 82) Hz
+82, 84, 86, 88, 90, 92, 94 e 96 Hz
 ```
 
-Em cada par, o primeiro valor é o pseudo-alvo e o segundo é o pseudo-ruído. A
-mesma inferência, regra por frequência e regra `2-de-8` são aplicadas. Uma
-decisão positiva no conjunto lateral é contabilizada como falso positivo do
-arquivo.
+Como a MSC não usa denominador espectral, não há mais pares circulares de
+pseudo-alvo/pseudo-ruído. A mesma inferência e regra por frequência são
+aplicadas às oito frequências laterais. Cada lateral é um experimento
+independente no cálculo da taxa de falso positivo.
 
 O controle é calculado nos próprios arquivos com estímulo para incluir
-artefatos da condição de aquisição. Porém, esses pares laterais não foram usados
-para estimar a linha empírica `B(Ausente)`, que foi ajustada com
-`freqEstim[i] / binsM[i]` nos arquivos ESP. Logo, a taxa lateral é um diagnóstico
-exploratório, não uma estimativa clínica validada de especificidade.
+artefatos da condição de aquisição. Porém, essas frequências laterais não foram
+usadas para estimar a linha empírica `B(Ausente)`, que foi ajustada nas
+frequências de `freqEstim` dos arquivos ESP. Logo, a taxa lateral é um
+diagnóstico exploratório, não uma estimativa clínica validada de especificidade.
 
 ### 9.4 Agregação e saída
 
 O arquivo `results/inference_analysis.json` contém:
 
 - configuração das regras de decisão;
-- taxas globais por arquivo;
-- detecção agrupada por nível de estímulo;
+- taxas globais por frequência;
+- detecção e falso positivo lateral agrupados por nível de estímulo;
 - detecção e falso positivo por participante;
-- decisão e número de frequências positivas para cada arquivo;
+- número de frequências positivas para cada arquivo;
 - por frequência, percentual em `Presente`, maior sequência consecutiva,
   decisão e caminho Viterbi completo.
 
-A taxa por nível é a fração dos 11 arquivos daquele nível classificados como
-positivos. A taxa por participante é a fração dos cinco arquivos desse
-participante classificados como positivos.
+As taxas de detecção e de falso positivo lateral usam como denominador o total
+de frequências avaliadas no agrupamento (global, nível de estímulo ou
+participante), e não o número de arquivos. Com oito frequências por arquivo,
+um grupo de 11 arquivos possui 88 experimentos de estímulo e 88 laterais.
 
-O relatório persistido não contém os valores F, p-valores, labels ou intervalos
-de épocas de cada janela. Os labels existem durante o processamento, mas são
-omitidos por `construir_relatorio`, e os valores F retornados pelo detector não
-são incorporados ao resultado. Essa é uma limitação de auditabilidade da
-implementação atual.
+Os resultados intermediários em memória preservam valores MSC, p-valores,
+labels e intervalos de épocas. O relatório persistido ainda omite esses campos e
+mantém apenas os caminhos e resumos por frequência; essa continua sendo uma
+limitação de auditabilidade do JSON de inferência.
 
 ### 9.5 Resultados de referência atuais
 
-Com a configuração acima, foram processados 55 arquivos, 11 participantes,
-cinco níveis e oito frequências por arquivo. O resultado global foi:
+Com 55 arquivos, 8 frequências por arquivo e a configuração descrita acima,
+foram avaliados 440 experimentos de estímulo e 440 experimentos laterais:
 
 ```text
-Detecção nos arquivos com estímulo: 18/55 = 32.73%
-Falso positivo lateral:             24/55 = 43.64%
+Detecção nas frequências de estímulo: 98/440 = 22,27%
+Falso positivo nas laterais:          18/440 =  4,09%
 ```
 
-| Nível | Detectados | Taxa de detecção |
-|---:|---:|---:|
-| 30 dB | 5/11 | 45.45% |
-| 40 dB | 2/11 | 18.18% |
-| 50 dB | 7/11 | 63.64% |
-| 60 dB | 2/11 | 18.18% |
-| 70 dB | 2/11 | 18.18% |
+| Nível | Frequências detectadas | Taxa de detecção | Laterais positivas | Falso positivo |
+|---:|---:|---:|---:|---:|
+| 30 dB | 5/88 | 5,68% | 3/88 | 3,41% |
+| 40 dB | 19/88 | 21,59% | 9/88 | 10,23% |
+| 50 dB | 17/88 | 19,32% | 2/88 | 2,27% |
+| 60 dB | 30/88 | 34,09% | 3/88 | 3,41% |
+| 70 dB | 27/88 | 30,68% | 1/88 | 1,14% |
 
-| Participante | Detecção estímulo | Falso positivo lateral |
-|---|---:|---:|
-| Ab | 40% | 60% |
-| An | 20% | 40% |
-| Bb | 20% | 0% |
-| Er | 40% | 60% |
-| Lu | 40% | 20% |
-| Qu | 40% | 80% |
-| Sa | 60% | 60% |
-| So | 0% | 40% |
-| Ti | 20% | 20% |
-| Vi | 40% | 60% |
-| Wr | 40% | 40% |
-
-A taxa lateral global supera a taxa de detecção e a detecção não cresce
-monotonicamente com o nível. Esses resultados indicam que as regras e os
-parâmetros atuais ainda não separam adequadamente alvo e controle; não devem ser
-interpretados como desempenho clínico.
+Essas taxas são diagnósticos exploratórios por frequência, não desempenho
+clínico validado. O código valida o detector, o janelamento e as fronteiras de
+p-valor da matriz B antes de executar a inferência.
 
 ## 10. Regras para alterações futuras
 
@@ -516,7 +500,7 @@ interpretados como desempenho clínico.
    processamento depender deles.
 5. Mantenha B global e os diagnósticos por frequência, salvo decisão explícita
    em contrário.
-6. Não chame a observação atual de MSC ou CSM.
+6. A observação atual é MSC; não a chame de CSM nem de teste F espectral local.
 7. Reavalie a distribuição nula ao mudar o detector ou sua agregação.
 8. Não converta `K_SINTETICO` em dB acústicos sem calibração experimental.
 9. Trate A como heurística de persistência enquanto não houver uma sequência de
