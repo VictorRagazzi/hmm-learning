@@ -1,26 +1,34 @@
 """Estima as linhas Ausente e Presente da matriz de emissao B.
 
-A observacao e a magnitude quadratica da coerencia (MSC), calculada
-separadamente para cada frequencia de estimulacao e em janelas de epocas::
+A observacao e a estatistica de um DETECTOR plugavel (ver detectors.py),
+calculada separadamente para cada frequencia de estimulacao e em janelas de
+epocas. O detector padrao e a magnitude quadratica da coerencia (MSC)::
 
     MSC = |sum_m X_m(f_alvo)|**2 / (M * sum_m |X_m(f_alvo)|**2)
 
 Sob H0, coeficientes complexos gaussianos circulares e epocas independentes,
-``MSC ~ Beta(1, M - 1)``, em que M e o numero de epocas da janela. A MSC mede
-fase e magnitude; ela nao e CSM nem o teste F espectral local.
+``MSC ~ Beta(1, M - 1)``, em que M e o numero de epocas da janela. Alem da
+MSC, o modulo detectors.py tambem oferece MMSC, o teste de Rayleigh (fase) e
+CSM (T^2 de Hotelling); o detector ativo e escolhido em tempo de execucao
+(ver ``selecionar_detector`` / variavel de ambiente ASSR_DETECTOR) e fica
+guardado em DETECTOR_ATUAL. Cada detector mede uma coisa um pouco diferente
+(fase, magnitude, ou ambas) - consulte detectors.py para a definicao exata de
+cada um.
 
 ``binsM`` continua sendo lido e preservado como metadado/controle, mas nao e
-usado como denominador da MSC.
+usado como denominador da estatistica do detector.
 
-Os limites dos labels sao quantis teoricos dessa distribuicao, definidos por
-faixas de p-valor. Assim, B(Ausente) nao e forcada a ser uniforme como ocorria
-quando os cortes eram quantis dos proprios dados ESP. As contagens das
-frequencias sao agrupadas em uma unica matriz B compartilhada. Os resultados
-por frequencia sao preservados apenas como diagnostico, pois as sequencias
-temporais de frequencias diferentes nao devem ser concatenadas.
+Os limites dos labels sao quantis teoricos da distribuicao nula do detector
+ativo, definidos por faixas de p-valor. Assim, B(Ausente) nao e forcada a ser
+uniforme como ocorria quando os cortes eram quantis dos proprios dados ESP.
+As contagens das frequencias sao agrupadas em uma unica matriz B
+compartilhada. Os resultados por frequencia sao preservados apenas como
+diagnostico, pois as sequencias temporais de frequencias diferentes nao devem
+ser concatenadas.
 
-A taxa de falsos positivos observada nos arquivos ESP e impressa para verificar
-as hipoteses do teste; os valores ainda nao constituem calibracao clinica.
+A taxa de falsos positivos observada nos arquivos ESP e impressa para
+verificar as hipoteses do teste; os valores ainda nao constituem calibracao
+clinica.
 """
 
 import glob
@@ -29,8 +37,8 @@ import os
 
 import h5py
 import numpy as np
-from scipy.stats import beta as distribuicao_msc
 
+import detectors as det_registry
 
 # ============================================================
 # CONFIGURACOES
@@ -45,11 +53,50 @@ ESTADOS = ["Ausente", "Presente"]
 PI_INICIAL = [0.99, 0.01]
 
 CHANNEL_INDEX = 0
-DETECTOR = "magnitude_quadratica_coerencia_msc"
+
+# --- Selecao do detector (MSC, MMSC, Rayleigh, CSM; ver detectors.py) ---
+# Prioridade: variavel de ambiente ASSR_DETECTOR > valor padrao abaixo >
+# (quando rodado como script, sem ASSR_DETECTOR definido) menu interativo.
+DETECTOR_NAME = os.environ.get("ASSR_DETECTOR", "msc")
+DETECTOR_ATUAL = det_registry.obter_detector(DETECTOR_NAME)
+# Mantido por compatibilidade: outros modulos (hmm_inference.py,
+# buscar_parametros.py) leem gom.DETECTOR como uma string, usada tambem para
+# validar consistencia com o detector salvo em observation_matrix.json.
+DETECTOR = DETECTOR_ATUAL.nome
+
+
+def selecionar_detector(nome=None, interativo=None):
+    """Define o detector ativo (DETECTOR_ATUAL / DETECTOR) para todo o modulo.
+
+    Prioridade de ``nome``: argumento explicito > ASSR_DETECTOR (ambiente) >
+    padrao atual do modulo. Se ``interativo`` for None, um menu e mostrado
+    somente quando o modulo estiver rodando como script (__main__) e
+    ASSR_DETECTOR NAO tiver sido definido no ambiente - isso permite rodar
+    get_obs_matrix.py, hmm_inference.py e buscar_parametros.py com o MESMO
+    detector de forma nao interativa (exportando ASSR_DETECTOR uma vez), sem
+    forcar um prompt em cada etapa.
+    """
+    global DETECTOR_NAME, DETECTOR_ATUAL, DETECTOR
+
+    padrao = nome or DETECTOR_NAME
+    if interativo is None:
+        interativo = __name__ == "__main__" and "ASSR_DETECTOR" not in os.environ
+
+    if interativo:
+        detector = det_registry.escolher_detector_interativo(padrao=padrao)
+    else:
+        detector = det_registry.obter_detector(padrao)
+        det_registry.imprimir_banner_detector(detector)
+
+    DETECTOR_ATUAL = detector
+    DETECTOR_NAME = detector.nome
+    DETECTOR = detector.nome
+    return detector
+
 
 # Cada janela gera uma observacao. So entram janelas completas.
 WINDOW_SIZE_EPOCHS = 10
-WINDOW_STEP_EPOCHS = 10
+WINDOW_STEP_EPOCHS = 5
 
 # Labels em ordem crescente de evidencia contra H0 (Ausente).
 NIVEIS_OBSERVACAO = ["muito_baixo", "baixo", "medio", "alto", "muito_alto"]
@@ -199,40 +246,34 @@ def injetar_tom_sintetico(x, canal, fs, freq_alvo, k):
 
 
 def calcular_msc_janelas(coeficientes):
-    """Calcula uma MSC entre epocas para cada janela completa."""
-    n_epocas = len(coeficientes)
-    valores = []
-    intervalos = []
-    for inicio in range(0, n_epocas - WINDOW_SIZE_EPOCHS + 1, WINDOW_STEP_EPOCHS):
-        fim = inicio + WINDOW_SIZE_EPOCHS
-        janela = coeficientes[inicio:fim]
-        numerador = np.abs(np.sum(janela)) ** 2
-        denominador = WINDOW_SIZE_EPOCHS * np.sum(np.abs(janela) ** 2)
-        valor_msc = numerador / (denominador + EPS)
-        valores.append(float(np.clip(valor_msc, 0.0, 1.0)))
-        intervalos.append((inicio, fim))
-    return np.asarray(valores), intervalos
+    """Estatistica do DETECTOR_ATUAL, uma por janela completa de epocas.
+
+    Mantem o nome antigo (especifico de MSC) por compatibilidade com
+    hmm_inference.py e buscar_parametros.py, mas agora delega ao detector
+    ativo (DETECTOR_ATUAL), que pode ser MSC, MMSC, Rayleigh ou CSM - ver
+    detectors.py. Trocar de detector aqui NAO exige alterar os outros
+    modulos, que so enxergam "a estatistica do detector ativo".
+    """
+    return det_registry.calcular_estatistica_janelas(
+        coeficientes, DETECTOR_ATUAL, WINDOW_SIZE_EPOCHS, WINDOW_STEP_EPOCHS
+    )
 
 
 def calcular_thresholds_msc(n_epocas_janela, p_value_boundaries):
-    """Converte fronteiras de p-valor em quantis da Beta(1, M-1)."""
+    """Converte fronteiras de p-valor em thresholds da estatistica do
+    DETECTOR_ATUAL (nome mantido por compatibilidade)."""
     if n_epocas_janela < 2:
-        raise ValueError("A MSC requer pelo menos duas epocas por janela")
-    thresholds = distribuicao_msc.isf(
-        np.asarray(p_value_boundaries, dtype=float),
-        1,
-        n_epocas_janela - 1,
-    )
+        raise ValueError("O detector requer pelo menos duas epocas por janela")
+    thresholds = DETECTOR_ATUAL.thresholds(n_epocas_janela, p_value_boundaries)
     if not np.all(np.isfinite(thresholds)) or np.any(np.diff(thresholds) <= 0):
         raise ValueError("As fronteiras de p-valor geraram thresholds degenerados")
     return thresholds
 
 
 def calcular_p_value_msc(valor_msc, n_epocas_janela):
-    """Calcula P(MSC >= valor | H0) pela distribuicao nula teorica."""
-    return float(
-        distribuicao_msc.sf(valor_msc, 1, n_epocas_janela - 1)
-    )
+    """P(estatistica_do_detector_ativo >= valor | H0) (nome mantido por
+    compatibilidade)."""
+    return DETECTOR_ATUAL.p_value(valor_msc, n_epocas_janela)
 
 
 def discretizar(valor, thresholds, labels):
@@ -398,7 +439,7 @@ def construir_matrizes_observacao(pasta_dados):
 
 
 def calcular_taxa_falso_positivo(dados, chave_n_janelas):
-    """Calcula a fracao de registros ESP acima da MSC critica configurada."""
+    """Calcula a fracao de registros ESP acima da estatistica critica configurada."""
     falsos_positivos = sum(
         registro["estado_calibracao"] == "Ausente"
         and registro["valor_msc"] >= dados["msc_critica"]
@@ -440,6 +481,7 @@ def construir_tabela_para_salvar(resultados):
         "configuracao": {
             "canal": CHANNEL_INDEX,
             "detector": DETECTOR,
+            "detector_nome_exibicao": DETECTOR_ATUAL.nome_exibicao,
             "tamanho_janela_epocas": WINDOW_SIZE_EPOCHS,
             "passo_janela_epocas": WINDOW_STEP_EPOCHS,
             "p_value_boundaries": list(P_VALUE_BOUNDARIES),
@@ -449,7 +491,7 @@ def construir_tabela_para_salvar(resultados):
                 "parametro_a": 1,
                 "parametro_b": WINDOW_SIZE_EPOCHS - 1,
             },
-            "uso_binsM": "controle_lateral; nao entra no calculo da MSC",
+            "uso_binsM": "controle_lateral; nao entra no calculo da estatistica",
             "k_sintetico": K_SINTETICO,
             "smoothing": SMOOTHING,
         },
@@ -488,11 +530,13 @@ def salvar_tabela_observacao(resultados, pasta_resultados=RESULTS_DIR):
 
 
 if __name__ == "__main__":
+    selecionar_detector()
+
     resultados = construir_matrizes_observacao(DATA_DIR)
     matriz_global = resultados["global"]
     caminho_saida = salvar_tabela_observacao(resultados)
 
-    print(f"Detector: {DETECTOR}")
+    print(f"\nDetector: {DETECTOR_ATUAL.nome_exibicao} (chave: {DETECTOR!r})")
     print(
         f"Janela: {WINDOW_SIZE_EPOCHS} epocas; passo: {WINDOW_STEP_EPOCHS}; "
         f"canal: {CHANNEL_INDEX}; k sintetico: {K_SINTETICO}"
@@ -502,9 +546,9 @@ if __name__ == "__main__":
     )
 
     print("\n=== Matriz B global (frequencias agrupadas) ===")
-    print("Thresholds MSC:", matriz_global["thresholds_msc"])
+    print("Thresholds do detector:", matriz_global["thresholds_msc"])
     print(
-        f"MSC critica (alpha={matriz_global['alpha']}): "
+        f"Limiar critico (alpha={matriz_global['alpha']}): "
         f"{matriz_global['msc_critica']:.6f}; "
         f"FP global observado em ESP: {taxa_fp_global:.2%}"
     )

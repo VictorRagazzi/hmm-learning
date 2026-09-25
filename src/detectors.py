@@ -279,10 +279,11 @@ def imprimir_menu_detectores():
 
 
 def imprimir_banner_detector(detector):
-    print("\n" + "-" * 64)
-    print(f"Detector ativo: {detector.nome_exibicao}  (chave: {detector.nome!r})")
-    print(f"  {detector.descricao}")
-    print("-" * 64)
+    print()
+    # print("\n" + "-" * 64)
+    # print(f"Detector ativo: {detector.nome_exibicao}  (chave: {detector.nome!r})")
+    # print(f"  {detector.descricao}")
+    # print("-" * 64)
 
 
 def escolher_detector_interativo(padrao="msc"):

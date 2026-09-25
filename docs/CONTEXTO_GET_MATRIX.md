@@ -5,7 +5,7 @@ parametrizam e aplicam o HMM:
 
 - `src/get_obs_matrix.py`: matriz de emissão `B`;
 - `src/get_tran_matrix.py`: matriz de transição `A`;
-- `src/hhm_inference.py`: inferência Viterbi e decisão exploratória de ASSR.
+- `src/hmm_inference.py`: inferência Viterbi e decisão exploratória de ASSR.
 
 Leia este arquivo antes de modificar qualquer um dos programas. Atualize-o na
 mesma tarefa sempre que houver mudança de comportamento, configuração, formato
@@ -26,7 +26,7 @@ As tabelas tratadas nesta etapa são:
 - `B[i, k] = P(label observado = k | estado = i)`.
 
 Os dois scripts de parametrização estimam as tabelas offline e gravam artefatos
-JSON em `results/`. O script `hhm_inference.py` consome esses artefatos, executa
+JSON em `results/`. O script `hmm_inference.py` consome esses artefatos, executa
 Viterbi e aplica uma regra heurística de decisão a cada frequência.
 Isso não constitui treinamento adicional nem decisão clínica final.
 
@@ -87,7 +87,7 @@ floor((N - WINDOW_SIZE_EPOCHS) / WINDOW_STEP_EPOCHS) + 1
 janelas completas, quando `N` é suficiente.
 
 Essas constantes estão declaradas separadamente nos dois arquivos de
-parametrização. `hhm_inference.py` importa as configurações e as funções do
+parametrização. `hmm_inference.py` importa as configurações e as funções do
 detector diretamente de `get_obs_matrix.py`. Qualquer alteração de tamanho ou
 passo ainda deve ser aplicada conscientemente a `get_obs_matrix.py` e
 `get_tran_matrix.py`, seguida de nova geração de `A` e `B`.
@@ -360,7 +360,7 @@ Na raiz do projeto:
 ```bash
 .venv/bin/python src/get_obs_matrix.py
 .venv/bin/python src/get_tran_matrix.py
-.venv/bin/python src/hhm_inference.py
+.venv/bin/python src/hmm_inference.py
 ```
 
 Os comandos imprimem os resumos e atualizam:
@@ -377,17 +377,27 @@ Verificação sintática:
 .venv/bin/python -m py_compile \
   src/get_obs_matrix.py \
   src/get_tran_matrix.py \
-  src/hhm_inference.py
+  src/hmm_inference.py
 ```
 
-## 9. Inferência e decisão — `hhm_inference.py`
+## 9. Inferência e decisão — `hmm_inference.py`
 
 ### 9.1 Entrada e unidade de inferência
 
-O script lê a matriz A de `results/transition_matrix.json` e a matriz B de
-`results/observation_matrix.json`. A ordem dos estados e labels e a soma das
-linhas são validadas antes do processamento. A distribuição inicial é
+O script lê a matriz A de `results/transition_matrix.json`. Para cada detector
+selecionado, calibra em memória uma matriz B própria a partir dos arquivos ESP,
+usando o mesmo fluxo de `get_obs_matrix.py`. A distribuição inicial é
 `PI_INICIAL = [0.99, 0.01]`, importada de `get_obs_matrix.py`.
+
+As configurações a avaliar ficam no array do topo do arquivo:
+
+```python
+DETECTOR_COMBINATIONS = [("rayleigh", "csm")]
+```
+
+Cada tupla é uma execução: `("rayleigh",)` seleciona somente Rayleigh e
+`("rayleigh", "csm")` combina ambos. As chaves disponíveis no registro são
+`msc`, `mmsc`, `rayleigh` e `csm`.
 
 São processados os 55 arquivos `*dB.mat`. Para cada arquivo, as oito
 frequências de `freqEstim` geram oito sequências Viterbi independentes. Não há
@@ -395,29 +405,35 @@ concatenação entre frequências, participantes, arquivos ou níveis de estímu
 O Viterbi opera em log-espaço para evitar underflow e retorna o caminho mais
 provável entre os estados `Ausente` e `Presente`.
 
-O detector não é reimplementado. O programa importa de `get_obs_matrix.py` a
-leitura dos `.mat`, extração dos coeficientes FFT complexos, cálculo da MSC por
-janela, thresholds e discretização. Assim, cada sequência usa:
+Os detectores não são reimplementados. O programa reutiliza o registro de
+`detectors.py`, a leitura dos `.mat` e a extração dos coeficientes FFT de
+`get_obs_matrix.py`. Cada detector produz seu próprio valor, p-valor, threshold
+teórico e label em cada janela.
+
+Quando há mais de um detector, o Viterbi combina as emissões sincronizadas por
+produto:
 
 ```text
-MSC = |soma_m X_m(freqEstim[i])|² /
-      (M * soma_m |X_m(freqEstim[i])|²)
+P(o_t | estado) = produto_d B_d[estado, label_d(t)]
 ```
 
-com janela de 10 épocas, passo 5 e os cinco labels da matriz B.
+No código, o produto é calculado como soma de log-probabilidades. Isso assume
+independência condicional entre detectores dado o estado. Como os testes são
+calculados sobre os mesmos coeficientes de EEG, eles podem ser correlacionados;
+a fusão é uma aproximação exploratória e pode supercontar evidência.
 
 ### 9.2 Decisão e agregação por frequência
 
 A configuração atual é:
 
 ```python
-MIN_CONSECUTIVE = 4
-MIN_PERCENT = 0.10
+MIN_CONSECUTIVE = 1
+MIN_PERCENT = 0.05
 MODO_REGRA_DECISAO = "OR"
 ```
 
-Uma frequência é detectada quando o caminho Viterbi possui pelo menos 10% das
-janelas em `Presente` **ou** pelo menos quatro janelas `Presente` consecutivas.
+Uma frequência é detectada quando o caminho Viterbi possui pelo menos 5% das
+janelas em `Presente` **ou** pelo menos uma janela `Presente`.
 Cada frequência é um
 experimento independente na agregação: se uma das oito frequências de um
 arquivo for detectada, esse arquivo contribui com `1/8 = 12,5%` para a taxa,
@@ -429,16 +445,16 @@ limiares por frequência são escolhas heurísticas ainda não validadas.
 
 ### 9.3 Falso positivo pelas frequências laterais
 
-O controle lateral aplica a MSC diretamente em cada frequência de `binsM`:
+O controle lateral aplica cada detector diretamente em cada frequência de
+`binsM`:
 
 ```text
 82, 84, 86, 88, 90, 92, 94 e 96 Hz
 ```
 
-Como a MSC não usa denominador espectral, não há mais pares circulares de
-pseudo-alvo/pseudo-ruído. A mesma inferência e regra por frequência são
-aplicadas às oito frequências laterais. Cada lateral é um experimento
-independente no cálculo da taxa de falso positivo.
+A mesma inferência e regra por frequência são aplicadas às oito frequências
+laterais. Cada lateral é um experimento independente no cálculo da taxa de
+falso positivo.
 
 O controle é calculado nos próprios arquivos com estímulo para incluir
 artefatos da condição de aquisição. Porém, essas frequências laterais não foram
@@ -450,45 +466,44 @@ diagnóstico exploratório, não uma estimativa clínica validada de especificid
 
 O arquivo `results/inference_analysis.json` contém:
 
-- configuração das regras de decisão;
-- taxas globais por frequência;
-- detecção e falso positivo lateral agrupados por nível de estímulo;
-- detecção e falso positivo por participante;
-- número de frequências positivas para cada arquivo;
-- por frequência, percentual em `Presente`, maior sequência consecutiva,
-  decisão e caminho Viterbi completo.
+- lista de combinações de detectores e regra de fusão;
+- acurácia balanceada, detecção e falso positivo do HMM por combinação;
+- as mesmas métricas do detector bruto separadas e identificadas por teste;
+- por combinação, arquivo e frequência: labels de cada detector, caminho
+  Viterbi, valores, p-valores e decisão bruta de cada teste.
 
 As taxas de detecção e de falso positivo lateral usam como denominador o total
 de frequências avaliadas no agrupamento (global, nível de estímulo ou
 participante), e não o número de arquivos. Com oito frequências por arquivo,
 um grupo de 11 arquivos possui 88 experimentos de estímulo e 88 laterais.
 
-Os resultados intermediários em memória preservam valores MSC, p-valores,
-labels e intervalos de épocas. O relatório persistido ainda omite esses campos e
-mantém apenas os caminhos e resumos por frequência; essa continua sendo uma
-limitação de auditabilidade do JSON de inferência.
+O JSON preserva os valores, p-valores, labels e intervalos por detector. Isso
+pode torná-lo consideravelmente maior ao selecionar várias combinações.
 
-### 9.5 Resultados de referência atuais
+A saída no terminal preserva o relatório detalhado: além do resumo global por
+combinação e por detector bruto, imprime detecção e falso positivo lateral por
+nível de estímulo e por participante, seguidos das contagens de estímulo e
+lateral de cada arquivo. Na execução multidetector, esses blocos são mostrados
+separadamente para cada combinação e discriminam cada detector bruto.
 
-Com 55 arquivos, 8 frequências por arquivo e a configuração descrita acima,
-foram avaliados 440 experimentos de estímulo e 440 experimentos laterais:
+### 9.5 Busca de parâmetros
 
-```text
-Detecção nas frequências de estímulo: 98/440 = 22,27%
-Falso positivo nas laterais:          18/440 =  4,09%
-```
+`src/search_hmm_parameters.py` possui seu próprio array
+`DETECTOR_COMBINATIONS`. A busca varia detector ou combinação juntamente com
+`K_SINTETICO`, `PI_INICIAL`, a matriz de transição `A` e a regra de decisão.
+Para `A`, combina por força bruta grades explícitas de `p_self` de Ausente e
+Presente e inclui também a matriz heurística salva em
+`transition_matrix.json`. Ela imprime o melhor HMM de cada combinação, sua
+melhor `A`, o melhor resultado bruto de cada teste individual e o melhor
+resultado global. O limite `FP_MAXIMO_HMM` continua aplicado somente aos
+candidatos HMM. Essa otimização de `A` sobre os mesmos dados usados na
+avaliação é ajuste exploratório in-sample: não é Baum–Welch, não corresponde a
+transições ocultas observadas e não constitui validação independente.
 
-| Nível | Frequências detectadas | Taxa de detecção | Laterais positivas | Falso positivo |
-|---:|---:|---:|---:|---:|
-| 30 dB | 5/88 | 5,68% | 3/88 | 3,41% |
-| 40 dB | 19/88 | 21,59% | 9/88 | 10,23% |
-| 50 dB | 17/88 | 19,32% | 2/88 | 2,27% |
-| 60 dB | 30/88 | 34,09% | 3/88 | 3,41% |
-| 70 dB | 27/88 | 30,68% | 1/88 | 1,14% |
-
-Essas taxas são diagnósticos exploratórios por frequência, não desempenho
-clínico validado. O código valida o detector, o janelamento e as fronteiras de
-p-valor da matriz B antes de executar a inferência.
+Não há ainda resultados de referência consolidados para a nova configuração
+multidetector. Eles devem ser regenerados antes de comparar desempenho. As
+taxas permanecem diagnósticos exploratórios por frequência, não desempenho
+clínico validado.
 
 ## 10. Regras para alterações futuras
 
@@ -500,7 +515,8 @@ p-valor da matriz B antes de executar a inferência.
    processamento depender deles.
 5. Mantenha B global e os diagnósticos por frequência, salvo decisão explícita
    em contrário.
-6. A observação atual é MSC; não a chame de CSM nem de teste F espectral local.
+6. Identifique sempre o detector de cada resultado; não chame MSC de CSM nem
+   trate combinações como um novo teste com distribuição nula própria.
 7. Reavalie a distribuição nula ao mudar o detector ou sua agregação.
 8. Não converta `K_SINTETICO` em dB acústicos sem calibração experimental.
 9. Trate A como heurística de persistência enquanto não houver uma sequência de
