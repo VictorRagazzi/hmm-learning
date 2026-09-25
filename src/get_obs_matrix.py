@@ -49,7 +49,7 @@ DETECTOR = "magnitude_quadratica_coerencia_msc"
 
 # Cada janela gera uma observacao. So entram janelas completas.
 WINDOW_SIZE_EPOCHS = 10
-WINDOW_STEP_EPOCHS = 5
+WINDOW_STEP_EPOCHS = 10
 
 # Labels em ordem crescente de evidencia contra H0 (Ausente).
 NIVEIS_OBSERVACAO = ["muito_baixo", "baixo", "medio", "alto", "muito_alto"]

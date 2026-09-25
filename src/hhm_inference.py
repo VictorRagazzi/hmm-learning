@@ -15,15 +15,21 @@ Fluxo:
    diferentes nao devem ser concatenadas).
 3. Aplica uma regra de decisao (percentual minimo e/ou numero de janelas
    consecutivas em "Presente") sobre cada caminho de estados -> detectado_freq.
-4. Trata cada frequencia como um experimento independente ao agregar a taxa de
+4. Em paralelo, aplica a MESMA regra de decisao diretamente sobre a
+   significancia do detector bruto (p_value <= SIGNIFICANCE_LEVEL, janela a
+   janela), sem passar pelo HMM/Viterbi. Isso serve como baseline: o detector
+   configurado em get_obs_matrix.py (generico, hoje MSC, mas pode ser trocado)
+   ja e um teste que funciona sozinho, entao o ganho do HMM so faz sentido se
+   ficar acima dessa baseline.
+5. Trata cada frequencia como um experimento independente ao agregar a taxa de
    deteccao (por exemplo, 1 frequencia detectada em 8 corresponde a 12,5%).
-5. Repete o mesmo pipeline diretamente nas frequencias laterais de ``binsM``,
-   onde nao ha estimulo esperado, para estimar a taxa de falso positivo
-   por frequencia, calibrada nos proprios arquivos com
-   estimulo (usar so os ESP omitiria o efeito de qualquer artefato do
-   estimulo/gravacao).
-6. Salva um relatorio consolidado e imprime as analises por nivel de dB e por
-   participante.
+6. Repete o mesmo pipeline (HMM e baseline do detector bruto) diretamente nas
+   frequencias laterais de ``binsM``, onde nao ha estimulo esperado, para
+   estimar a taxa de falso positivo por frequencia, calibrada nos proprios
+   arquivos com estimulo (usar so os ESP omitiria o efeito de qualquer
+   artefato do estimulo/gravacao).
+7. Salva um relatorio consolidado e imprime as analises por nivel de dB e por
+   participante, comparando HMM vs. detector bruto.
 
 Aviso metodologico: A e uma heuristica de persistencia (nao Baum-Welch) e
 B(Presente) e uma resposta sintetica (Secao 4.5 do README). Os resultados
@@ -46,6 +52,7 @@ from get_obs_matrix import (
     NIVEIS_OBSERVACAO,
     P_VALUE_BOUNDARIES,
     PI_INICIAL,
+    SIGNIFICANCE_LEVEL,
     WINDOW_SIZE_EPOCHS,
     WINDOW_STEP_EPOCHS,
     calcular_msc_janelas,
@@ -67,14 +74,17 @@ OUTPUT_FILE = os.path.join(RESULTS_DIR, "inference_analysis.json")
 
 PRESENT_PATTERN = "*dB.mat"
 
-# --- Regra de decisao sobre o caminho de estados de UMA frequencia ---
-# Detecta se o caminho tiver ao menos MIN_CONSECUTIVE janelas seguidas em
-# "Presente" e/ou se a fracao de janelas em "Presente" for >= MIN_PERCENT.
+# --- Regra de decisao sobre uma sequencia booleana (janela a janela) ---
+# Detecta se a sequencia tiver ao menos MIN_CONSECUTIVE janelas seguidas com
+# valor True e/ou se a fracao de janelas True for >= MIN_PERCENT.
 # MODO_REGRA_DECISAO combina os dois criterios: "OR" (qualquer um basta) ou
 # "AND" (os dois precisam valer). Use None em um dos limiares para
-# desativa-lo.
-MIN_CONSECUTIVE = 4
-MIN_PERCENT = 0.10
+# desativa-lo. A MESMA regra e aplicada tanto ao caminho de estados do HMM
+# (estado == "Presente") quanto a significancia bruta do detector
+# (p_value <= SIGNIFICANCE_LEVEL), para que a comparacao entre os dois seja
+# justa.
+MIN_CONSECUTIVE = 3
+MIN_PERCENT = 0.05
 MODO_REGRA_DECISAO = "OR"  # "OR" ou "AND"
 
 # ============================================================
@@ -197,14 +207,14 @@ def construir_sequencia_labels(x, canal, fs, frequencia, thresholds):
 
 
 # ============================================================
-# REGRA DE DECISAO SOBRE UM CAMINHO DE ESTADOS
+# REGRA DE DECISAO (compartilhada entre HMM e detector bruto)
 # ============================================================
 
-def maior_sequencia_consecutiva(caminho, estado_alvo="Presente"):
+def maior_sequencia_consecutiva_binaria(binaria):
     maior = 0
     atual = 0
-    for estado in caminho:
-        if estado == estado_alvo:
+    for valor in binaria:
+        if valor:
             atual += 1
             maior = max(maior, atual)
         else:
@@ -212,9 +222,12 @@ def maior_sequencia_consecutiva(caminho, estado_alvo="Presente"):
     return maior
 
 
-def avaliar_caminho(caminho, estado_alvo="Presente"):
-    """Aplica a regra de consecutivos e/ou percentual sobre um caminho."""
-    if len(caminho) == 0:
+def avaliar_binaria(binaria):
+    """Aplica a regra de consecutivos e/ou percentual sobre uma sequencia
+    booleana janela-a-janela. E' o nucleo comum usado tanto para o caminho de
+    estados do HMM (apos comparar com o estado alvo) quanto para a
+    significancia bruta do detector (p_value <= SIGNIFICANCE_LEVEL)."""
+    if len(binaria) == 0:
         return {
             "n_janelas": 0,
             "max_consecutivas": 0,
@@ -222,8 +235,8 @@ def avaliar_caminho(caminho, estado_alvo="Presente"):
             "detectado": False,
         }
 
-    max_consec = maior_sequencia_consecutiva(caminho, estado_alvo)
-    percentual = caminho.count(estado_alvo) / len(caminho)
+    max_consec = maior_sequencia_consecutiva_binaria(binaria)
+    percentual = sum(binaria) / len(binaria)
 
     criterio_consec = (
         MIN_CONSECUTIVE is not None and max_consec >= MIN_CONSECUTIVE
@@ -244,13 +257,28 @@ def avaliar_caminho(caminho, estado_alvo="Presente"):
         detectado = criterio_consec or criterio_percent
 
     return {
-        "n_janelas": len(caminho),
+        "n_janelas": len(binaria),
         "max_consecutivas": max_consec,
         "percentual_presente": percentual,
         "criterio_consecutivas_ok": criterio_consec,
         "criterio_percentual_ok": criterio_percent,
         "detectado": detectado,
     }
+
+
+def avaliar_caminho(caminho, estado_alvo="Presente"):
+    """Aplica a regra de decisao sobre um caminho de estados do HMM."""
+    binaria = [estado == estado_alvo for estado in caminho]
+    return avaliar_binaria(binaria)
+
+
+def avaliar_detector_bruto(p_values, alpha=SIGNIFICANCE_LEVEL):
+    """Aplica a MESMA regra de decisao diretamente sobre a significancia do
+    detector bruto (sem HMM/Viterbi): cada janela conta como "positiva" se
+    p_value <= alpha. Serve de baseline generica, valida para qualquer
+    detector configurado em get_obs_matrix.py (hoje MSC)."""
+    binaria = [p <= alpha for p in p_values]
+    return avaliar_binaria(binaria)
 
 
 # ============================================================
@@ -275,7 +303,8 @@ def parse_nome_arquivo(caminho):
 # ============================================================
 
 def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
-    """Roda Viterbi + regra de decisao nas frequencias de estimulo e laterais."""
+    """Roda Viterbi + detector bruto + regra de decisao nas frequencias de
+    estimulo e laterais."""
     freq_estim = arquivo["freq_estim"]
     bins_m = arquivo["bins_m"]
 
@@ -287,6 +316,7 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
         caminho = viterbi(labels, matriz_a, matriz_b, PI_INICIAL, ESTADOS,
                            NIVEIS_OBSERVACAO)
         avaliacao = avaliar_caminho(caminho)
+        avaliacao_bruta = avaliar_detector_bruto(p_values)
         resultado_por_frequencia[float(freq_alvo)] = {
             "frequencia_controle_associada": float(freq_controle),
             "labels": labels,
@@ -295,11 +325,17 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
             "intervalos_epocas": [list(intervalo) for intervalo in intervalos],
             "caminho_estados": caminho,
             **avaliacao,
+            "deteccao_detector_bruto": avaliacao_bruta,
         }
 
     n_detectadas = sum(
         r["detectado"] for r in resultado_por_frequencia.values()
     )
+    n_detectadas_bruto = sum(
+        r["deteccao_detector_bruto"]["detectado"]
+        for r in resultado_por_frequencia.values()
+    )
+
     resultado_lateral = {}
     for frequencia_lateral in bins_m:
         labels, valores_msc, p_values, intervalos = construir_sequencia_labels(
@@ -309,6 +345,7 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
         caminho = viterbi(labels, matriz_a, matriz_b, PI_INICIAL, ESTADOS,
                            NIVEIS_OBSERVACAO)
         avaliacao = avaliar_caminho(caminho)
+        avaliacao_bruta = avaliar_detector_bruto(p_values)
         resultado_lateral[float(frequencia_lateral)] = {
             "labels": labels,
             "valores_msc": valores_msc.tolist(),
@@ -316,17 +353,24 @@ def processar_arquivo(arquivo, matriz_a, matriz_b, thresholds):
             "intervalos_epocas": [list(intervalo) for intervalo in intervalos],
             "caminho_estados": caminho,
             **avaliacao,
+            "deteccao_detector_bruto": avaliacao_bruta,
         }
 
     n_detectadas_lateral = sum(
         r["detectado"] for r in resultado_lateral.values()
     )
+    n_detectadas_lateral_bruto = sum(
+        r["deteccao_detector_bruto"]["detectado"]
+        for r in resultado_lateral.values()
+    )
     return {
         "por_frequencia_estimulo": resultado_por_frequencia,
         "n_frequencias_detectadas": n_detectadas,
+        "n_frequencias_detectadas_bruto": n_detectadas_bruto,
         "n_frequencias_total": len(resultado_por_frequencia),
         "por_frequencia_lateral": resultado_lateral,
         "n_lateral_detectadas": n_detectadas_lateral,
+        "n_lateral_detectadas_bruto": n_detectadas_lateral_bruto,
         "n_lateral_total": len(resultado_lateral),
     }
 
@@ -399,16 +443,28 @@ def analisar_por_nivel_db(resultados_arquivos):
         registros = grupos[nivel_db]
         n_frequencias = sum(r["n_frequencias_total"] for r in registros)
         n_detectados = sum(r["n_frequencias_detectadas"] for r in registros)
+        n_detectados_bruto = sum(
+            r["n_frequencias_detectadas_bruto"] for r in registros
+        )
         n_laterais = sum(r["n_lateral_total"] for r in registros)
         n_falsos_positivos = sum(r["n_lateral_detectadas"] for r in registros)
+        n_falsos_positivos_bruto = sum(
+            r["n_lateral_detectadas_bruto"] for r in registros
+        )
         analise[nivel_db] = {
             "n_arquivos": len(registros),
             "n_frequencias_estimulo": n_frequencias,
             "n_frequencias_estimulo_detectadas": n_detectados,
             "taxa_deteccao": n_detectados / n_frequencias,
+            "n_frequencias_estimulo_detectadas_detector_bruto": n_detectados_bruto,
+            "taxa_deteccao_detector_bruto": n_detectados_bruto / n_frequencias,
             "n_frequencias_laterais": n_laterais,
             "n_frequencias_laterais_detectadas": n_falsos_positivos,
             "taxa_falso_positivo_lateral": n_falsos_positivos / n_laterais,
+            "n_frequencias_laterais_detectadas_detector_bruto": n_falsos_positivos_bruto,
+            "taxa_falso_positivo_lateral_detector_bruto": (
+                n_falsos_positivos_bruto / n_laterais
+            ),
         }
     return analise
 
@@ -431,8 +487,15 @@ def analisar_por_participante(resultados_arquivos):
                         f"{r['n_frequencias_detectadas']}/"
                         f"{r['n_frequencias_total']}"
                     ),
+                    "n_frequencias_estimulo_detectadas_detector_bruto": (
+                        f"{r['n_frequencias_detectadas_bruto']}/"
+                        f"{r['n_frequencias_total']}"
+                    ),
                     "n_frequencias_laterais_detectadas": (
                         f"{r['n_lateral_detectadas']}/{r['n_lateral_total']}"
+                    ),
+                    "n_frequencias_laterais_detectadas_detector_bruto": (
+                        f"{r['n_lateral_detectadas_bruto']}/{r['n_lateral_total']}"
                     ),
                 }
                 for r in registros
@@ -440,8 +503,14 @@ def analisar_por_participante(resultados_arquivos):
             "taxa_deteccao_estimulo": sum(
                 r["n_frequencias_detectadas"] for r in registros
             ) / sum(r["n_frequencias_total"] for r in registros),
+            "taxa_deteccao_estimulo_detector_bruto": sum(
+                r["n_frequencias_detectadas_bruto"] for r in registros
+            ) / sum(r["n_frequencias_total"] for r in registros),
             "taxa_falso_positivo_lateral": sum(
                 r["n_lateral_detectadas"] for r in registros
+            ) / sum(r["n_lateral_total"] for r in registros),
+            "taxa_falso_positivo_lateral_detector_bruto": sum(
+                r["n_lateral_detectadas_bruto"] for r in registros
             ) / sum(r["n_lateral_total"] for r in registros),
         }
     return analise
@@ -453,8 +522,14 @@ def construir_relatorio(resultados_arquivos):
 
     total_frequencias = sum(r["n_frequencias_total"] for r in resultados_arquivos)
     total_detectadas = sum(r["n_frequencias_detectadas"] for r in resultados_arquivos)
+    total_detectadas_bruto = sum(
+        r["n_frequencias_detectadas_bruto"] for r in resultados_arquivos
+    )
     total_laterais = sum(r["n_lateral_total"] for r in resultados_arquivos)
     total_falsos_positivos = sum(r["n_lateral_detectadas"] for r in resultados_arquivos)
+    total_falsos_positivos_bruto = sum(
+        r["n_lateral_detectadas_bruto"] for r in resultados_arquivos
+    )
 
     return {
         "nome": "relatorio_inferencia_hmm",
@@ -465,15 +540,26 @@ def construir_relatorio(resultados_arquivos):
             "min_consecutive": MIN_CONSECUTIVE,
             "min_percent": MIN_PERCENT,
             "modo_regra_decisao": MODO_REGRA_DECISAO,
+            "alpha_detector_bruto": SIGNIFICANCE_LEVEL,
         },
         "resumo_global": {
             "n_arquivos": len(resultados_arquivos),
             "n_frequencias_estimulo": total_frequencias,
             "n_frequencias_estimulo_detectadas": total_detectadas,
             "taxa_deteccao_estimulo": total_detectadas / total_frequencias,
+            "n_frequencias_estimulo_detectadas_detector_bruto": total_detectadas_bruto,
+            "taxa_deteccao_estimulo_detector_bruto": (
+                total_detectadas_bruto / total_frequencias
+            ),
             "n_frequencias_laterais": total_laterais,
             "n_frequencias_laterais_detectadas": total_falsos_positivos,
             "taxa_falso_positivo_lateral": total_falsos_positivos / total_laterais,
+            "n_frequencias_laterais_detectadas_detector_bruto": (
+                total_falsos_positivos_bruto
+            ),
+            "taxa_falso_positivo_lateral_detector_bruto": (
+                total_falsos_positivos_bruto / total_laterais
+            ),
         },
         "por_nivel_db": {
             str(nivel): dados for nivel, dados in por_nivel.items()
@@ -485,8 +571,14 @@ def construir_relatorio(resultados_arquivos):
                 "participante": r["participante"],
                 "nivel_db": r["nivel_db"],
                 "n_frequencias_detectadas": r["n_frequencias_detectadas"],
+                "n_frequencias_detectadas_detector_bruto": r[
+                    "n_frequencias_detectadas_bruto"
+                ],
                 "n_frequencias_total": r["n_frequencias_total"],
                 "n_lateral_detectadas": r["n_lateral_detectadas"],
+                "n_lateral_detectadas_detector_bruto": r[
+                    "n_lateral_detectadas_bruto"
+                ],
                 "n_lateral_total": r["n_lateral_total"],
                 "por_frequencia_estimulo": {
                     str(freq): {
@@ -494,6 +586,7 @@ def construir_relatorio(resultados_arquivos):
                         "percentual_presente": dados["percentual_presente"],
                         "detectado": dados["detectado"],
                         "caminho_estados": dados["caminho_estados"],
+                        "detector_bruto": dados["deteccao_detector_bruto"],
                     }
                     for freq, dados in r["por_frequencia_estimulo"].items()
                 },
@@ -503,6 +596,7 @@ def construir_relatorio(resultados_arquivos):
                         "percentual_presente": dados["percentual_presente"],
                         "detectado": dados["detectado"],
                         "caminho_estados": dados["caminho_estados"],
+                        "detector_bruto": dados["deteccao_detector_bruto"],
                     }
                     for freq, dados in r["por_frequencia_lateral"].items()
                 },
@@ -512,7 +606,10 @@ def construir_relatorio(resultados_arquivos):
         "aviso": (
             "Analise exploratoria. A e heuristica de persistencia, "
             "B(Presente) usa injecao sintetica, e os limiares por frequencia "
-            "ainda nao foram validados clinicamente."
+            "ainda nao foram validados clinicamente. A linha 'detector_bruto' "
+            "aplica a mesma regra de decisao diretamente sobre a "
+            "significancia (p_value <= alpha) do detector configurado em "
+            "get_obs_matrix.py, sem HMM, como baseline de comparacao."
         ),
     }
 
@@ -535,44 +632,62 @@ def imprimir_relatorio(relatorio):
     print(
         f"MIN_CONSECUTIVE={cfg['min_consecutive']}  "
         f"MIN_PERCENT={cfg['min_percent']}  "
-        f"MODO={cfg['modo_regra_decisao']}"
+        f"MODO={cfg['modo_regra_decisao']}  "
+        f"(detector bruto: {cfg['detector']}, alpha={cfg['alpha_detector_bruto']})"
     )
 
     resumo = relatorio["resumo_global"]
     print(
-        f"\nTaxa de deteccao global (estimulo): "
+        f"\nHMM         -> deteccao (estimulo): "
         f"{resumo['taxa_deteccao_estimulo']:.2%}  |  "
-        f"Taxa de falso positivo global (lateral): "
+        f"falso positivo (lateral): "
         f"{resumo['taxa_falso_positivo_lateral']:.2%}"
     )
+    print(
+        f"Detector bruto -> deteccao (estimulo): "
+        f"{resumo['taxa_deteccao_estimulo_detector_bruto']:.2%}  |  "
+        f"falso positivo (lateral): "
+        f"{resumo['taxa_falso_positivo_lateral_detector_bruto']:.2%}"
+    )
 
-    print("\n=== DETECCAO POR NIVEL DE ESTIMULO (dB) ===")
+    print("\n=== DETECCAO POR NIVEL DE ESTIMULO (dB) — HMM vs. detector bruto ===")
     for nivel, dados in relatorio["por_nivel_db"].items():
         print(
-            f"  {nivel:>4} dB: {dados['taxa_deteccao']:.2%} "
+            f"  {nivel:>4} dB:"
+            f"  HMM {dados['taxa_deteccao']:.2%} "
             f"({dados['n_frequencias_estimulo_detectadas']}/"
-            f"{dados['n_frequencias_estimulo']} frequencias)  |  "
-            f"falso positivo lateral: "
-            f"{dados['taxa_falso_positivo_lateral']:.2%} "
+            f"{dados['n_frequencias_estimulo']})"
+            f"  |  bruto {dados['taxa_deteccao_detector_bruto']:.2%} "
+            f"({dados['n_frequencias_estimulo_detectadas_detector_bruto']}/"
+            f"{dados['n_frequencias_estimulo']})"
+        )
+        print(
+            f"          FP lateral:"
+            f"  HMM {dados['taxa_falso_positivo_lateral']:.2%} "
             f"({dados['n_frequencias_laterais_detectadas']}/"
-            f"{dados['n_frequencias_laterais']} frequencias)"
+            f"{dados['n_frequencias_laterais']})"
+            f"  |  bruto {dados['taxa_falso_positivo_lateral_detector_bruto']:.2%} "
+            f"({dados['n_frequencias_laterais_detectadas_detector_bruto']}/"
+            f"{dados['n_frequencias_laterais']})"
         )
 
     print("\n=== DETECCAO POR PARTICIPANTE (estimulo vs. lateral/ruido) ===")
     for participante, dados in relatorio["por_participante"].items():
         print(
             f"\n  Participante {participante}: "
-            f"deteccao estimulo = {dados['taxa_deteccao_estimulo']:.2%}, "
-            f"falso positivo lateral = {dados['taxa_falso_positivo_lateral']:.2%}"
+            f"HMM estimulo={dados['taxa_deteccao_estimulo']:.2%} "
+            f"(bruto={dados['taxa_deteccao_estimulo_detector_bruto']:.2%})  |  "
+            f"HMM FP lateral={dados['taxa_falso_positivo_lateral']:.2%} "
+            f"(bruto={dados['taxa_falso_positivo_lateral_detector_bruto']:.2%})"
         )
         for item in dados["detalhe_por_arquivo"]:
             nivel = item["nivel_db"]
-            contagem_estimulo = item["n_frequencias_estimulo_detectadas"]
-            contagem_lateral = item["n_frequencias_laterais_detectadas"]
             print(
                 f"    {item['arquivo']:20} nivel={nivel:>4} dB  "
-                f"estimulo: {contagem_estimulo:>3}   "
-                f"lateral: {contagem_lateral:>3}"
+                f"estimulo: HMM {item['n_frequencias_estimulo_detectadas']:>5}  "
+                f"bruto {item['n_frequencias_estimulo_detectadas_detector_bruto']:>5}   "
+                f"lateral: HMM {item['n_frequencias_laterais_detectadas']:>5}  "
+                f"bruto {item['n_frequencias_laterais_detectadas_detector_bruto']:>5}"
             )
 
 

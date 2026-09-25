@@ -14,57 +14,57 @@
   ],
   "matriz": [
     [
-      0.5036921011411949,
-      0.4146341463414634,
-      0.0405012307003804,
-      0.0355784291787872,
-      0.005594092638174088
+      0.5070967741935484,
+      0.4064516129032258,
+      0.04774193548387097,
+      0.03397849462365592,
+      0.004731182795698925
     ],
     [
-      0.13582456925486686,
-      0.3219959722533005,
-      0.11031550682479302,
-      0.18057731036025956,
-      0.25128664130678
+      0.13376344086021505,
+      0.32129032258064516,
+      0.11483870967741935,
+      0.17161290322580644,
+      0.25849462365591397
     ]
   ],
   "probabilidades": {
     "Ausente": {
-      "muito_baixo": 0.5036921011411949,
-      "baixo": 0.4146341463414634,
-      "medio": 0.0405012307003804,
-      "alto": 0.0355784291787872,
-      "muito_alto": 0.005594092638174088
+      "muito_baixo": 0.5070967741935484,
+      "baixo": 0.4064516129032258,
+      "medio": 0.04774193548387097,
+      "alto": 0.03397849462365592,
+      "muito_alto": 0.004731182795698925
     },
     "Presente": {
-      "muito_baixo": 0.13582456925486686,
-      "baixo": 0.3219959722533005,
-      "medio": 0.11031550682479302,
-      "alto": 0.18057731036025956,
-      "muito_alto": 0.25128664130678
+      "muito_baixo": 0.13376344086021505,
+      "baixo": 0.32129032258064516,
+      "medio": 0.11483870967741935,
+      "alto": 0.17161290322580644,
+      "muito_alto": 0.25849462365591397
     }
   },
   "contagens": {
     "Ausente": {
-      "muito_baixo": 1125,
-      "baixo": 926,
-      "medio": 90,
-      "alto": 79,
-      "muito_alto": 12
+      "muito_baixo": 589,
+      "baixo": 472,
+      "medio": 55,
+      "alto": 39,
+      "muito_alto": 5
     },
     "Presente": {
-      "muito_baixo": 303,
-      "baixo": 719,
-      "medio": 246,
-      "alto": 403,
-      "muito_alto": 561
+      "muito_baixo": 155,
+      "baixo": 373,
+      "medio": 133,
+      "alto": 199,
+      "muito_alto": 300
     }
   },
   "configuracao": {
     "canal": 0,
     "detector": "magnitude_quadratica_coerencia_msc",
     "tamanho_janela_epocas": 10,
-    "passo_janela_epocas": 5,
+    "passo_janela_epocas": 10,
     "p_value_boundaries": [
       0.5,
       0.1,
@@ -84,7 +84,7 @@
   "resumo": {
     "n_arquivos": 11,
     "n_frequencias": 8,
-    "n_janelas_por_estado": 2232,
+    "n_janelas_por_estado": 1160,
     "thresholds_msc": [
       0.07412528771270957,
       0.2257363173188729,
@@ -92,166 +92,166 @@
       0.4005157496810589
     ],
     "msc_critica": 0.2831288355631135,
-    "taxa_falso_positivo_global_esp": 0.04077060931899642
+    "taxa_falso_positivo_global_esp": 0.03793103448275862
   },
   "diagnostico_por_frequencia": {
     "81.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.025089605734767026,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.027586206896551724,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 146,
-          "baixo": 118,
-          "medio": 8,
-          "alto": 6,
-          "muito_alto": 1
+          "muito_baixo": 76,
+          "baixo": 61,
+          "medio": 4,
+          "alto": 4,
+          "muito_alto": 0
         },
         "Presente": {
-          "muito_baixo": 46,
-          "baixo": 90,
-          "medio": 37,
-          "alto": 45,
-          "muito_alto": 61
+          "muito_baixo": 23,
+          "baixo": 50,
+          "medio": 17,
+          "alto": 26,
+          "muito_alto": 29
         }
       }
     },
     "83.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.053763440860215055,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.027586206896551724,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 126,
-          "baixo": 126,
-          "medio": 12,
-          "alto": 14,
-          "muito_alto": 1
+          "muito_baixo": 68,
+          "baixo": 66,
+          "medio": 7,
+          "alto": 4,
+          "muito_alto": 0
         },
         "Presente": {
-          "muito_baixo": 44,
-          "baixo": 86,
-          "medio": 21,
-          "alto": 60,
-          "muito_alto": 68
+          "muito_baixo": 23,
+          "baixo": 45,
+          "medio": 12,
+          "alto": 28,
+          "muito_alto": 37
         }
       }
     },
     "85.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.04659498207885305,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.041379310344827586,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 121,
-          "baixo": 124,
-          "medio": 21,
-          "alto": 12,
-          "muito_alto": 1
+          "muito_baixo": 64,
+          "baixo": 63,
+          "medio": 12,
+          "alto": 6,
+          "muito_alto": 0
         },
         "Presente": {
-          "muito_baixo": 33,
-          "baixo": 81,
-          "medio": 28,
-          "alto": 60,
-          "muito_alto": 77
+          "muito_baixo": 20,
+          "baixo": 38,
+          "medio": 15,
+          "alto": 30,
+          "muito_alto": 42
         }
       }
     },
     "87.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.053763440860215055,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.05517241379310345,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 139,
-          "baixo": 112,
-          "medio": 13,
-          "alto": 12,
-          "muito_alto": 3
+          "muito_baixo": 72,
+          "baixo": 56,
+          "medio": 9,
+          "alto": 6,
+          "muito_alto": 2
         },
         "Presente": {
-          "muito_baixo": 37,
-          "baixo": 86,
-          "medio": 26,
-          "alto": 50,
-          "muito_alto": 80
+          "muito_baixo": 21,
+          "baixo": 43,
+          "medio": 16,
+          "alto": 20,
+          "muito_alto": 45
         }
       }
     },
     "89.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.043010752688172046,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.05517241379310345,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 145,
-          "baixo": 113,
-          "medio": 9,
-          "alto": 12,
+          "muito_baixo": 72,
+          "baixo": 59,
+          "medio": 6,
+          "alto": 8,
           "muito_alto": 0
         },
         "Presente": {
-          "muito_baixo": 45,
-          "baixo": 85,
-          "medio": 25,
-          "alto": 47,
-          "muito_alto": 77
+          "muito_baixo": 24,
+          "baixo": 44,
+          "medio": 12,
+          "alto": 21,
+          "muito_alto": 44
         }
       }
     },
     "91.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.021505376344086023,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.027586206896551724,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 169,
-          "baixo": 96,
-          "medio": 8,
-          "alto": 4,
-          "muito_alto": 2
+          "muito_baixo": 88,
+          "baixo": 47,
+          "medio": 6,
+          "alto": 3,
+          "muito_alto": 1
         },
         "Presente": {
-          "muito_baixo": 29,
-          "baixo": 90,
-          "medio": 42,
-          "alto": 51,
-          "muito_alto": 67
+          "muito_baixo": 15,
+          "baixo": 46,
+          "medio": 23,
+          "alto": 24,
+          "muito_alto": 37
         }
       }
     },
     "93.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.02867383512544803,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.034482758620689655,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 140,
-          "baixo": 122,
-          "medio": 9,
-          "alto": 5,
-          "muito_alto": 3
+          "muito_baixo": 75,
+          "baixo": 61,
+          "medio": 4,
+          "alto": 4,
+          "muito_alto": 1
         },
         "Presente": {
-          "muito_baixo": 33,
-          "baixo": 95,
-          "medio": 32,
-          "alto": 50,
-          "muito_alto": 69
+          "muito_baixo": 14,
+          "baixo": 50,
+          "medio": 17,
+          "alto": 29,
+          "muito_alto": 35
         }
       }
     },
     "95.0": {
-      "n_janelas_por_estado": 279,
-      "taxa_falso_positivo_esp": 0.053763440860215055,
+      "n_janelas_por_estado": 145,
+      "taxa_falso_positivo_esp": 0.034482758620689655,
       "contagens": {
         "Ausente": {
-          "muito_baixo": 139,
-          "baixo": 115,
-          "medio": 10,
-          "alto": 14,
+          "muito_baixo": 74,
+          "baixo": 59,
+          "medio": 7,
+          "alto": 4,
           "muito_alto": 1
         },
         "Presente": {
-          "muito_baixo": 36,
-          "baixo": 106,
-          "medio": 35,
-          "alto": 40,
-          "muito_alto": 62
+          "muito_baixo": 15,
+          "baixo": 57,
+          "medio": 21,
+          "alto": 21,
+          "muito_alto": 31
         }
       }
     }
