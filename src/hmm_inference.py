@@ -297,6 +297,12 @@ def validar_combinacoes(combinacoes):
             raise ValueError(f"Detector repetido na combinacao {nomes}")
         for nome in nomes:
             det_registry.obter_detector(nome)
+        if {"msc", "csm"}.issubset(nomes):
+            raise ValueError(
+                f"Combinacao {nomes} inclui MSC e CSM, que representam "
+                "evidencia praticamente redundante; nao use ambas como "
+                "emissoes condicionalmente independentes"
+            )
         normalizadas.append(nomes)
     if len(set(normalizadas)) != len(normalizadas):
         raise ValueError("DETECTOR_COMBINATIONS contem combinacoes repetidas")
@@ -829,11 +835,19 @@ def _processar_grupo_multidetector(x, fs, frequencias, combinacao,
         evidencias = {}
         bruto = {}
         intervalos_referencia = None
+        coeficientes, _ = extrair_coeficientes_epocas(
+            x, CHANNEL_INDEX, fs, frequencia
+        )
         for nome in combinacao:
             detector = det_registry.obter_detector(nome)
-            labels, valores, p_values, intervalos = construir_sequencia_detector(
-                x, CHANNEL_INDEX, fs, frequencia, detector
+            valores, intervalos = det_registry.calcular_estatistica_janelas(
+                coeficientes, detector, WINDOW_SIZE_EPOCHS, WINDOW_STEP_EPOCHS
             )
+            thresholds = detector.thresholds(
+                WINDOW_SIZE_EPOCHS, P_VALUE_BOUNDARIES
+            )
+            labels = [discretizar(v, thresholds, NIVEIS_OBSERVACAO) for v in valores]
+            p_values = [detector.p_value(v, WINDOW_SIZE_EPOCHS) for v in valores]
             if intervalos_referencia is not None and intervalos != intervalos_referencia:
                 raise ValueError("Detectores produziram janelas nao sincronizadas")
             intervalos_referencia = intervalos
@@ -842,6 +856,9 @@ def _processar_grupo_multidetector(x, fs, frequencias, combinacao,
                 **avaliar_detector_bruto(p_values),
                 "valores": valores.tolist(),
                 "p_values": p_values,
+                "p_value_gravacao_completa": detector.p_value(
+                    detector.estatistica(coeficientes), len(coeficientes)
+                ),
             }
         caminho = viterbi_multidetector(
             evidencias, matriz_a, matrizes_b, PI_INICIAL, ESTADOS,
@@ -936,6 +953,35 @@ def _metricas_resultados(resultados, detector_bruto=None):
     }
 
 
+def _metricas_gravacao_completa(resultados, detector_nome):
+    positivos_estimulo = positivos_lateral = 0
+    estimulo = lateral = 0
+    for arquivo in resultados:
+        for frequencia in arquivo["por_frequencia_estimulo"].values():
+            estimulo += 1
+            positivos_estimulo += (
+                frequencia["detector_bruto_por_detector"][detector_nome]
+                ["p_value_gravacao_completa"] <= SIGNIFICANCE_LEVEL
+            )
+        for frequencia in arquivo["por_frequencia_lateral"].values():
+            lateral += 1
+            positivos_lateral += (
+                frequencia["detector_bruto_por_detector"][detector_nome]
+                ["p_value_gravacao_completa"] <= SIGNIFICANCE_LEVEL
+            )
+    taxa_det = positivos_estimulo / estimulo
+    taxa_fp = positivos_lateral / lateral
+    return {
+        "n_frequencias_estimulo": estimulo,
+        "n_frequencias_estimulo_detectadas": positivos_estimulo,
+        "taxa_deteccao": taxa_det,
+        "n_frequencias_laterais": lateral,
+        "n_frequencias_laterais_detectadas": positivos_lateral,
+        "taxa_falso_positivo": taxa_fp,
+        "acuracia_balanceada": (taxa_det + 1.0 - taxa_fp) / 2.0,
+    }
+
+
 def construir_relatorio_multidetector(resultados_por_combinacao):
     detectores = sorted({
         nome for chave in resultados_por_combinacao for nome in chave.split("+")
@@ -952,6 +998,12 @@ def construir_relatorio_multidetector(resultados_por_combinacao):
         chave: _metricas_resultados(resultados)
         for chave, resultados in resultados_por_combinacao.items()
     }
+    gravacao_completa = {}
+    for nome in detectores:
+        chave = next(c for c in resultados_por_combinacao if nome in c.split("+"))
+        gravacao_completa[nome] = _metricas_gravacao_completa(
+            resultados_por_combinacao[chave], nome
+        )
     return {
         "nome": "relatorio_inferencia_hmm_multidetector",
         "configuracao": {
@@ -967,6 +1019,7 @@ def construir_relatorio_multidetector(resultados_por_combinacao):
         },
         "hmm_por_combinacao": hmm,
         "detector_bruto_por_teste": bruto,
+        "detector_gravacao_completa_por_teste": gravacao_completa,
         "detalhe_por_combinacao": resultados_por_combinacao,
         "aviso": (
             "Resultados exploratorios, nao clinicamente validados. A fusao "
@@ -998,6 +1051,10 @@ def imprimir_relatorio_multidetector(relatorio):
               f"    acuracia={m['acuracia_balanceada']:.2%}  "
               f"deteccao={m['taxa_deteccao']:.2%}  "
               f"FP={m['taxa_falso_positivo']:.2%}")
+    print("\nDetector aplicado uma vez a todas as epocas de cada gravacao")
+    for nome, m in relatorio["detector_gravacao_completa_por_teste"].items():
+        print(f"  {nome:10s} deteccao={m['taxa_deteccao']:.2%}  "
+              f"FP={m['taxa_falso_positivo']:.2%}")
 
     for combinacao, resultados in relatorio["detalhe_por_combinacao"].items():
         detectores = combinacao.split("+")
@@ -1024,49 +1081,13 @@ def imprimir_relatorio_multidetector(relatorio):
                 f"({hmm['n_frequencias_laterais_detectadas']}/"
                 f"{hmm['n_frequencias_laterais']}) | bruto: {', '.join(brutos_fp)}"
             )
-
-        print(f"\n=== DETECCAO POR PARTICIPANTE — {combinacao} ===")
-        participantes = sorted({r["participante"] for r in resultados})
-        for participante in participantes:
-            grupo = [r for r in resultados if r["participante"] == participante]
-            hmm = _metricas_resultados(grupo)
-            bruto_resumo = []
-            for nome in detectores:
-                metrica = _metricas_resultados(grupo, nome)
-                bruto_resumo.append(
-                    f"{nome}: estimulo={metrica['taxa_deteccao']:.2%}, "
-                    f"FP={metrica['taxa_falso_positivo']:.2%}"
-                )
-            print(
-                f"\n  Participante {participante}: "
-                f"HMM estimulo={hmm['taxa_deteccao']:.2%}  "
-                f"HMM FP lateral={hmm['taxa_falso_positivo']:.2%}  |  "
-                f"bruto: {'; '.join(bruto_resumo)}"
-            )
-            for item in grupo:
-                estimulo = item["por_frequencia_estimulo"].values()
-                lateral = item["por_frequencia_lateral"].values()
-                n_estimulo = sum(d["detectado"] for d in estimulo)
-                n_lateral = sum(d["detectado"] for d in lateral)
-                contagens_brutas = []
-                for nome in detectores:
-                    bruto_estimulo = sum(
-                        d["detector_bruto_por_detector"][nome]["detectado"]
-                        for d in item["por_frequencia_estimulo"].values()
-                    )
-                    bruto_lateral = sum(
-                        d["detector_bruto_por_detector"][nome]["detectado"]
-                        for d in item["por_frequencia_lateral"].values()
-                    )
-                    contagens_brutas.append(
-                        f"{nome} {bruto_estimulo/8}/{bruto_lateral/8}"
-                    )
-                print(
-                    f"    {os.path.basename(item['arquivo']):20} "
-                    f"nivel={item['nivel_db']:>4} dB  "
-                    f"HMM estimulo/lateral={n_estimulo/8}/{n_lateral/8}  |  "
-                    f"bruto estimulo/lateral: {', '.join(contagens_brutas)}\n"
-                )
+            completos = [
+                f"{nome} "
+                f"{_metricas_gravacao_completa(grupo, nome)['taxa_deteccao']:.2%}/"
+                f"{_metricas_gravacao_completa(grupo, nome)['taxa_falso_positivo']:.2%}"
+                for nome in detectores
+            ]
+            print(f"          Gravacao completa (det/FP): {', '.join(completos)}")
 
 
 if __name__ == "__main__":

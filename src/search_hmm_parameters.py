@@ -3,7 +3,8 @@
 Alem da regra de decisao (MIN_CONSECUTIVE, MIN_PERCENT, MODO_REGRA_DECISAO),
 esta versao tambem varia:
 
-  - PI_INICIAL: distribuicao inicial usada pelo Viterbi.
+  - PI_INICIAL: distribuicao inicial usada pelo Viterbi, com probabilidade
+    inicial de Ausente entre 0.50 e 0.99.
   - K_SINTETICO: amplitude do tom sintetico usado para calibrar B(Presente)
     em get_obs_matrix.py.
   - Matriz A: probabilidades de autopermanencia dos estados Ausente e
@@ -42,11 +43,16 @@ antes da comparacao. Ele NAO se aplica ao teto do detector bruto sozinho, que
 continua sendo reportado sem filtro, como referencia do que da pra tirar do
 detector sem HMM.
 
-Nenhum resultado e salvo em arquivo (mesmo comportamento do script original).
+O resumo da busca e salvo atomicamente em
+``results/search_hmm_parameters.json``. Cada combinacao concluida e gravada,
+e ``--resume`` retoma combinacoes completas de uma execucao interrompida.
 """
 
+import argparse
 import glob
+import json
 import os
+import tempfile
 from itertools import product
 
 import numpy as np
@@ -76,16 +82,17 @@ PI_INICIAL_VALUES = (
     (0.99, 0.01),
     (0.95, 0.05),
     (0.90, 0.10),
+    (0.85, 0.15),
     (0.80, 0.20),
+    (0.75, 0.25),
     (0.70, 0.30),
+    (0.65, 0.35),
+    (0.60, 0.40),
+    (0.55, 0.45),
     (0.50, 0.50),
-    (0.40, 0.60),
-    (0.30, 0.70),
-    (0.20, 0.80),
-    (0.10, 0.90),
-    (0.05, 0.95),
-    (0.01, 0.99),
 )
+
+PERSISTENCE_VALUES = tuple(pi[0] for pi in PI_INICIAL_VALUES)
 
 # Amplitude do tom sintetico (em unidades de desvio-padrao da epoca) usada
 # para calibrar B(Presente) em get_obs_matrix.py.
@@ -95,15 +102,16 @@ K_SINTETICO_VALUES = (0.005, 0.01, 0.02, 0.05, 0.1)
 # Grade de persistencia da matriz A. Cada par gera:
 # [[p_ausente, 1-p_ausente], [1-p_presente, p_presente]]. A matriz heuristica
 # de transition_matrix.json tambem entra automaticamente como candidata.
-P_SELF_AUSENTE_VALUES = (0.90, 0.95, 0.98, 0.99)
-P_SELF_PRESENTE_VALUES = (0.90, 0.95, 0.98, 0.99)
+P_SELF_AUSENTE_VALUES = PERSISTENCE_VALUES
+P_SELF_PRESENTE_VALUES = PERSISTENCE_VALUES
 
 # Corte automatico de falso positivo, SO para a selecao do melhor resultado
 # do HMM (nao afeta o teto do detector bruto sozinho).
-FP_MAXIMO_HMM = 0.80  # 12.5%, meio do intervalo 10-15% pedido
+FP_MAXIMO_HMM = 0.05
 
-# O espaco de busca inclui tanto detectores isolados quanto fusoes. Adicione
-# ou remova tuplas livremente; cada tupla e uma configuracao candidata.
+# CSM circular e MSC sao equivalentes sob o nulo do codigo. Nao os combinamos
+# como evidencias independentes; hmi.validar_combinacoes tambem rejeita essa
+# combinacao para evitar dupla contagem.
 DETECTOR_COMBINATIONS = [
     ("csm",),
     ("msc",),
@@ -112,16 +120,13 @@ DETECTOR_COMBINATIONS = [
     ("rayleigh", "csm"),
     ("rayleigh", "msc"),
     ("rayleigh", "mmsc"),
-    ("csm", "msc"),
     ("csm", "mmsc"),
     ("mmsc", "msc"),
     ("rayleigh", "csm", "mmsc"),
-    ("rayleigh", "csm", "msc"),
     ("rayleigh", "mmsc", "msc"),
-    ("csm", "msc", "mmsc"),
-    ("rayleigh", "mmsc", "msc", "csm"),
 ]
 
+SEARCH_OUTPUT_FILE = os.path.join("results", "search_hmm_parameters.json")
 
 # ============================================================
 # VALIDACAO
@@ -322,7 +327,9 @@ def _montar_resultado_apenas_bruto(arquivos_deteccao):
             binaria_bruto = [
                 p <= gom.SIGNIFICANCE_LEVEL for p in dados["p_values"]
             ]
-            saida[freq] = {"deteccao_detector_bruto": _stats_binaria(binaria_bruto)}
+            saida[freq] = {
+                "deteccao_detector_bruto": _stats_binaria(binaria_bruto),
+            }
         return saida
 
     return [
@@ -584,12 +591,34 @@ def computar_evidencias_multidetector(pasta_dados, combinacoes):
             resultado = {}
             for frequencia in frequencias:
                 por_detector = {}
+                coeficientes, _ = hmi.extrair_coeficientes_epocas(
+                    arquivo["x"], gom.CHANNEL_INDEX, arquivo["fs"], frequencia
+                )
                 for nome in nomes:
-                    labels, _, p_values, _ = hmi.construir_sequencia_detector(
-                        arquivo["x"], gom.CHANNEL_INDEX, arquivo["fs"],
-                        frequencia, hmi.det_registry.obter_detector(nome),
+                    detector = hmi.det_registry.obter_detector(nome)
+                    valores, _ = hmi.det_registry.calcular_estatistica_janelas(
+                        coeficientes, detector, gom.WINDOW_SIZE_EPOCHS,
+                        gom.WINDOW_STEP_EPOCHS,
                     )
-                    por_detector[nome] = {"labels": labels, "p_values": p_values}
+                    thresholds = detector.thresholds(
+                        gom.WINDOW_SIZE_EPOCHS, gom.P_VALUE_BOUNDARIES
+                    )
+                    labels = [
+                        hmi.discretizar(v, thresholds, gom.NIVEIS_OBSERVACAO)
+                        for v in valores
+                    ]
+                    p_values = [
+                        detector.p_value(v, gom.WINDOW_SIZE_EPOCHS)
+                        for v in valores
+                    ]
+                    por_detector[nome] = {
+                        "labels": labels,
+                        "p_values": p_values,
+                        "p_value_gravacao_completa": detector.p_value(
+                            detector.estatistica(coeficientes),
+                            len(coeficientes),
+                        ),
+                    }
                 resultado[float(frequencia)] = por_detector
             return resultado
 
@@ -607,9 +636,11 @@ def rodar_viterbi_multidetector(evidencias, matriz_a, matrizes_b, combinacao,
                                 pi_inicial):
     """Viterbi em lote, agrupando sequencias de mesmo comprimento."""
     resultados = [{
+        "arquivo": arquivo["arquivo"],
+        "nivel_db": arquivo["nivel_db"],
         "por_frequencia_estimulo": {},
         "por_frequencia_lateral": {},
-    } for _ in evidencias]
+    } for arquivo in evidencias]
     grupos = {}
     for indice, arquivo in enumerate(evidencias):
         for chave_grupo in ("por_frequencia_estimulo", "por_frequencia_lateral"):
@@ -666,9 +697,90 @@ def resultado_bruto_detector(evidencias, detector_nome):
             for freq, por_detector in dados_grupo.items()
         }
     return [{
+        "arquivo": a["arquivo"],
+        "nivel_db": a["nivel_db"],
         "por_frequencia_estimulo": grupo(a["por_frequencia_estimulo"]),
         "por_frequencia_lateral": grupo(a["por_frequencia_lateral"]),
     } for a in evidencias]
+
+
+def metricas_gravacao_completa(evidencias, detector_nome, nivel_db=None):
+    estimulo = lateral = positivos_estimulo = positivos_lateral = 0
+    for arquivo in evidencias:
+        if nivel_db is not None and arquivo["nivel_db"] != nivel_db:
+            continue
+        for frequencia in arquivo["por_frequencia_estimulo"].values():
+            estimulo += 1
+            positivos_estimulo += (
+                frequencia[detector_nome]["p_value_gravacao_completa"]
+                <= gom.SIGNIFICANCE_LEVEL
+            )
+        for frequencia in arquivo["por_frequencia_lateral"].values():
+            lateral += 1
+            positivos_lateral += (
+                frequencia[detector_nome]["p_value_gravacao_completa"]
+                <= gom.SIGNIFICANCE_LEVEL
+            )
+    taxa_deteccao = positivos_estimulo / estimulo
+    taxa_fp = positivos_lateral / lateral
+    return {
+        "n_frequencias_estimulo": estimulo,
+        "n_frequencias_estimulo_detectadas": positivos_estimulo,
+        "taxa_deteccao": taxa_deteccao,
+        "n_frequencias_laterais": lateral,
+        "n_frequencias_laterais_detectadas": positivos_lateral,
+        "taxa_falso_positivo": taxa_fp,
+        "acuracia_balanceada": (taxa_deteccao + 1.0 - taxa_fp) / 2.0,
+    }
+
+
+def metricas_por_nivel(resultados, consecutivas, percentual, modo,
+                       usar_bruto=False):
+    niveis = sorted({r["nivel_db"] for r in resultados})
+    return {
+        str(nivel): avaliar_parametros(
+            [r for r in resultados if r["nivel_db"] == nivel],
+            consecutivas, percentual, modo, usar_bruto=usar_bruto,
+        )
+        for nivel in niveis
+    }
+
+
+def configuracao_busca(combinacoes):
+    return {
+        "combinacoes_detectores": [list(c) for c in combinacoes],
+        "k_sintetico": list(K_SINTETICO_VALUES),
+        "pi_inicial": [list(pi) for pi in PI_INICIAL_VALUES],
+        "p_self_ausente": list(P_SELF_AUSENTE_VALUES),
+        "p_self_presente": list(P_SELF_PRESENTE_VALUES),
+        "min_consecutive": list(MIN_CONSECUTIVE_VALUES),
+        "min_percent": list(MIN_PERCENT_VALUES),
+        "modo_regra_decisao": list(MODO_REGRA_DECISAO_VALUES),
+        "fp_maximo_hmm": FP_MAXIMO_HMM,
+        "window_size_epochs": gom.WINDOW_SIZE_EPOCHS,
+        "window_step_epochs": gom.WINDOW_STEP_EPOCHS,
+        "alpha_detector_bruto": gom.SIGNIFICANCE_LEVEL,
+    }
+
+
+def salvar_json_atomico(dados, caminho):
+    pasta = os.path.dirname(caminho) or "."
+    os.makedirs(pasta, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=pasta,
+        delete=False, suffix=".tmp",
+    ) as arquivo:
+        json.dump(
+            dados, arquivo, ensure_ascii=False, indent=2,
+            default=lambda valor: (
+                valor.item() if isinstance(valor, np.generic)
+                else valor.tolist() if isinstance(valor, np.ndarray)
+                else str(valor)
+            ),
+        )
+        arquivo.write("\n")
+        temporario = arquivo.name
+    os.replace(temporario, caminho)
 
 
 def melhor_regra_vetorizada(resultados, regras):
@@ -733,10 +845,23 @@ def melhor_regra_vetorizada(resultados, regras):
 
 
 def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
-                                             combinacoes=DETECTOR_COMBINATIONS):
+                                             combinacoes=DETECTOR_COMBINATIONS,
+                                             retomar=False,
+                                             caminho_saida=SEARCH_OUTPUT_FILE):
     validar_espaco_busca()
     combinacoes = hmi.validar_combinacoes(combinacoes)
     nomes = sorted({nome for combo in combinacoes for nome in combo})
+    config = configuracao_busca(combinacoes)
+    if retomar and os.path.exists(caminho_saida):
+        with open(caminho_saida, "r", encoding="utf-8") as arquivo:
+            salvo = json.load(arquivo)
+        if salvo.get("configuracao_busca") != config:
+            raise ValueError(
+                f"{caminho_saida}: configuracao difere da busca interrompida; "
+                "use uma nova execucao sem --resume"
+            )
+        if salvo.get("status") == "complete":
+            return salvo
     matriz_a_heuristica = hmi.carregar_matriz_transicao()
     matrizes_a = construir_candidatas_matriz_a(matriz_a_heuristica)
     evidencias = computar_evidencias_multidetector(pasta_dados, combinacoes)
@@ -760,17 +885,54 @@ def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
                  **metricas},
             ))
         melhores_brutos[nome] = max(candidatos, key=lambda item: item[0])[1]
+        melhores_brutos[nome]["por_nivel_db"] = metricas_por_nivel(
+            resultados, melhores_brutos[nome]["min_consecutive"],
+            melhores_brutos[nome]["min_percent"],
+            melhores_brutos[nome]["modo_regra_decisao"], usar_bruto=True,
+        )
+
+    detector_gravacao_completa = {
+        nome: {
+            "global": metricas_gravacao_completa(evidencias, nome),
+            "por_nivel_db": {
+                str(nivel): metricas_gravacao_completa(evidencias, nome, nivel)
+                for nivel in sorted({a["nivel_db"] for a in evidencias})
+            },
+        }
+        for nome in nomes
+    }
 
     melhores_hmm = {}
     total_avaliadas = 0
     total_excluidas = 0
+    if retomar and os.path.exists(caminho_saida):
+        with open(caminho_saida, "r", encoding="utf-8") as arquivo:
+            salvo = json.load(arquivo)
+        melhores_hmm = salvo.get("melhor_hmm_por_combinacao", {})
+        total_avaliadas = salvo.get("total_avaliadas", 0)
+        total_excluidas = salvo.get("total_excluidas_por_fp", 0)
+    salvar_json_atomico({
+        "nome": "busca_parametros_hmm",
+        "status": "running",
+        "configuracao_busca": config,
+        "melhor_hmm_por_combinacao": melhores_hmm,
+        "melhor_bruto_por_detector": melhores_brutos,
+        "detector_gravacao_completa_por_teste": detector_gravacao_completa,
+        "total_avaliadas": total_avaliadas,
+        "total_excluidas_por_fp": total_excluidas,
+        "total_matrizes_a": len(matrizes_a),
+        "combinacoes_concluidas": list(melhores_hmm),
+    }, caminho_saida)
     total_topo = (len(combinacoes) * len(K_SINTETICO_VALUES)
                   * len(PI_INICIAL_VALUES) * len(matrizes_a))
-    atual = 0
+    atual = len(melhores_hmm) * len(K_SINTETICO_VALUES) * len(PI_INICIAL_VALUES) * len(matrizes_a)
     for combinacao in combinacoes:
+        chave_combo = hmi.nome_combinacao(combinacao)
+        if chave_combo in melhores_hmm:
+            continue
         melhor = None
         melhor_chave = None
-        chave_combo = hmi.nome_combinacao(combinacao)
+        melhor_resultado = None
         for k_sintetico in K_SINTETICO_VALUES:
             matrizes_b = {
                 nome: hmi.construir_matriz_b_detector(
@@ -780,9 +942,10 @@ def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
             for nome_a, matriz_a in matrizes_a:
                 for pi_inicial in PI_INICIAL_VALUES:
                     atual += 1
-                    print(f"\rDetectores={chave_combo:<20} K={k_sintetico:<6} "
-                          f"{nome_a:<19} PI={pi_inicial} "
-                          f"({atual}/{total_topo})", end="", flush=True)
+                    if atual == 1 or atual % 50 == 0:
+                        print(f"Busca {atual}/{total_topo}: "
+                              f"{chave_combo}, K={k_sintetico}, A={nome_a}, "
+                              f"PI={pi_inicial}", flush=True)
                     resultado = rodar_viterbi_multidetector(
                         evidencias, matriz_a, matrizes_b, combinacao, pi_inicial
                     )
@@ -795,6 +958,7 @@ def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
                         melhor_chave is None or chave > melhor_chave
                     ):
                         melhor_chave = chave
+                        melhor_resultado = resultado
                         melhor = {
                             "detectores": list(combinacao),
                             "k_sintetico": k_sintetico,
@@ -805,22 +969,43 @@ def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
                             "pi_inicial": pi_inicial,
                             **candidato,
                         }
+        if melhor is not None:
+            melhor["por_nivel_db"] = metricas_por_nivel(
+                melhor_resultado, melhor["min_consecutive"],
+                melhor["min_percent"], melhor["modo_regra_decisao"],
+            )
         melhores_hmm[chave_combo] = melhor
-    print()
+        salvar_json_atomico({
+            "nome": "busca_parametros_hmm",
+            "status": "running",
+            "configuracao_busca": config,
+            "melhor_hmm_por_combinacao": melhores_hmm,
+            "melhor_bruto_por_detector": melhores_brutos,
+            "detector_gravacao_completa_por_teste": detector_gravacao_completa,
+            "total_avaliadas": total_avaliadas,
+            "total_excluidas_por_fp": total_excluidas,
+            "total_matrizes_a": len(matrizes_a),
+            "combinacoes_concluidas": list(melhores_hmm),
+        }, caminho_saida)
     validos = [r for r in melhores_hmm.values() if r is not None]
-    if not validos:
-        raise RuntimeError("Nenhuma combinacao respeitou FP_MAXIMO_HMM")
     melhor_global = max(validos, key=lambda r: (
         r["acuracia_balanceada"], -r["taxa_falso_positivo"], r["taxa_deteccao"]
-    ))
-    return {
+    )) if validos else None
+    resumo = {
+        "nome": "busca_parametros_hmm",
+        "status": "complete",
+        "configuracao_busca": config,
         "melhor_global": melhor_global,
         "melhor_hmm_por_combinacao": melhores_hmm,
         "melhor_bruto_por_detector": melhores_brutos,
+        "detector_gravacao_completa_por_teste": detector_gravacao_completa,
         "total_avaliadas": total_avaliadas,
         "total_excluidas_por_fp": total_excluidas,
         "total_matrizes_a": len(matrizes_a),
+        "combinacoes_concluidas": list(melhores_hmm),
     }
+    salvar_json_atomico(resumo, caminho_saida)
+    return resumo
 
 
 def imprimir_resultado_multidetector(resumo):
@@ -834,12 +1019,33 @@ def imprimir_resultado_multidetector(resumo):
               f"FP={resultado['taxa_falso_positivo']:.2%} "
               f"A=({resultado['p_self_ausente']:.3f},"
               f"{resultado['p_self_presente']:.3f})")
+        for nivel, metricas in resultado["por_nivel_db"].items():
+            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%} "
+                  f"({metricas['n_frequencias_estimulo_detectadas']}/"
+                  f"{metricas['n_frequencias_estimulo']}), "
+                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
     print("\nMelhores resultados dos detectores brutos por teste")
     for nome, resultado in resumo["melhor_bruto_por_detector"].items():
         print(f"  {nome:24s} acuracia={resultado['acuracia_balanceada']:.2%} "
               f"deteccao={resultado['taxa_deteccao']:.2%} "
               f"FP={resultado['taxa_falso_positivo']:.2%}")
+        for nivel, metricas in resultado["por_nivel_db"].items():
+            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%}, "
+                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
+    print("\nBaseline: detector uma vez por gravacao completa (det/FP por nivel)")
+    for nome, resultado in resumo["detector_gravacao_completa_por_teste"].items():
+        print(f"  {nome}:")
+        for nivel, metricas in resultado["por_nivel_db"].items():
+            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%} "
+                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
     melhor = resumo["melhor_global"]
+    if melhor is None:
+        print(
+            f"\nNenhuma combinacao respeitou o limite de FP "
+            f"({FP_MAXIMO_HMM:.2%}). A busca completa foi salva."
+        )
+        print(f"Avaliacoes: {resumo['total_avaliadas']:,}")
+        return
     print(f"\nMelhor global: {'+'.join(melhor['detectores'])} — "
           f"acuracia={melhor['acuracia_balanceada']:.2%}")
     print(
@@ -866,5 +1072,19 @@ def imprimir_resultado_multidetector(resumo):
 
 
 if __name__ == "__main__":
-    resumo = buscar_melhores_parametros_multidetector(gom.DATA_DIR)
+    import sys
+    if "--continuous-map" in sys.argv:
+        sys.argv.remove("--continuous-map")
+        import search_map_beta_hmm
+        search_map_beta_hmm.main()
+        sys.exit(0)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="retoma a busca interrompida em results/search_hmm_parameters.json",
+    )
+    argumentos = parser.parse_args()
+    resumo = buscar_melhores_parametros_multidetector(
+        gom.DATA_DIR, retomar=argumentos.resume
+    )
     imprimir_resultado_multidetector(resumo)

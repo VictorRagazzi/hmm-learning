@@ -234,6 +234,38 @@ def extrair_coeficientes_epocas(x, canal, fs, freq_alvo):
     return espectro[:, idx_alvo], bin_alvo
 
 
+def extrair_coeficientes_espectrais_locais(
+        x, canal, fs, freq_alvo, frequencias_excluidas, n_bins_ruido=2):
+    """Extrai alvo e bins locais de ruido nao pertencentes a freqEstim."""
+    epocas = np.asarray(x[canal, :, :], dtype=float)
+    n_amostras = epocas.shape[1]
+    bins_hz = np.fft.rfftfreq(n_amostras, d=1.0 / fs)
+    alvo_idx = int(np.argmin(np.abs(bins_hz - freq_alvo)))
+    excluidos = {
+        int(np.argmin(np.abs(bins_hz - frequencia)))
+        for frequencia in np.asarray(frequencias_excluidas, dtype=float)
+    }
+    excluidos.add(alvo_idx)
+    candidatos = [
+        idx for idx in range(1, len(bins_hz)) if idx not in excluidos
+    ]
+    candidatos.sort(key=lambda idx: (abs(bins_hz[idx] - freq_alvo), idx))
+    ruido_idx = candidatos[:n_bins_ruido]
+    if len(ruido_idx) != n_bins_ruido:
+        raise ValueError(
+            f"Nao foi possivel selecionar {n_bins_ruido} bins de ruido para "
+            f"{freq_alvo} Hz"
+        )
+    espectro = np.fft.rfft(epocas, axis=1)
+    indices = [alvo_idx, *ruido_idx]
+    return espectro[:, indices], {
+        "alvo_idx": alvo_idx,
+        "alvo_hz": float(bins_hz[alvo_idx]),
+        "ruido_idx": ruido_idx,
+        "ruido_hz": [float(bins_hz[idx]) for idx in ruido_idx],
+    }
+
+
 def injetar_tom_sintetico(x, canal, fs, freq_alvo, k):
     """Copia x e soma, em cada epoca do canal escolhido, k*std(epoca)*seno."""
     x_sintetico = np.asarray(x, dtype=float).copy()
@@ -335,9 +367,19 @@ def construir_matrizes_observacao(pasta_dados):
 
         for arquivo in arquivos:
             freq_controle = arquivo["bins_m"][indice_freq]
-            coeficientes, bin_alvo = extrair_coeficientes_epocas(
-                arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo
-            )
+            if DETECTOR == "spectral_f":
+                coeficientes, metadados_bins = (
+                    extrair_coeficientes_espectrais_locais(
+                        arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo,
+                        arquivo["freq_estim"],
+                        det_registry.SPECTRAL_F_NOISE_BINS,
+                    )
+                )
+                bin_alvo = metadados_bins["alvo_hz"]
+            else:
+                coeficientes, bin_alvo = extrair_coeficientes_epocas(
+                    arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo
+                )
             _, bin_controle = localizar_bin_fft(
                 arquivo["x"].shape[2], arquivo["fs"], freq_controle
             )
@@ -346,9 +388,16 @@ def construir_matrizes_observacao(pasta_dados):
             x_sintetico = injetar_tom_sintetico(
                 arquivo["x"], CHANNEL_INDEX, arquivo["fs"], freq_alvo, K_SINTETICO
             )
-            coeficientes_s, _ = extrair_coeficientes_epocas(
-                x_sintetico, CHANNEL_INDEX, arquivo["fs"], freq_alvo
-            )
+            if DETECTOR == "spectral_f":
+                coeficientes_s, _ = extrair_coeficientes_espectrais_locais(
+                    x_sintetico, CHANNEL_INDEX, arquivo["fs"], freq_alvo,
+                    arquivo["freq_estim"],
+                    det_registry.SPECTRAL_F_NOISE_BINS,
+                )
+            else:
+                coeficientes_s, _ = extrair_coeficientes_epocas(
+                    x_sintetico, CHANNEL_INDEX, arquivo["fs"], freq_alvo
+                )
             msc_presente, _ = calcular_msc_janelas(coeficientes_s)
 
             valores_ausente.extend(msc_ausente)
@@ -465,6 +514,52 @@ def construir_tabela_para_salvar(resultados):
         estado: matriz_global[estado]
         for estado in ESTADOS
     }
+    if DETECTOR == "msc":
+        distribuicao_nula = {
+            "nome": "Beta",
+            "parametro_a": 1,
+            "parametro_b": WINDOW_SIZE_EPOCHS - 1,
+        }
+    elif DETECTOR == "csm":
+        distribuicao_nula = {
+            "nome": "F",
+            "graus_liberdade_numerador": 2,
+            "graus_liberdade_denominador": 2 * (WINDOW_SIZE_EPOCHS - 1),
+            "nota": "T2 circular; equivalente a MSC sob as mesmas hipoteses",
+        }
+    elif DETECTOR == "rayleigh":
+        distribuicao_nula = {
+            "nome": "Rayleigh_aproximada",
+            "formula_cauda": "exp(-M * PLV^2)",
+        }
+    elif DETECTOR == "mmsc":
+        distribuicao_nula = {
+            "nome": "convolucao_de_duas_Beta",
+            "parametros_cada_metade": [
+                1, max(WINDOW_SIZE_EPOCHS // 2, 2) - 1
+            ],
+            "estatistica": "media_de_duas_MSC_independentes",
+        }
+    elif DETECTOR == "hotelling":
+        distribuicao_nula = {
+            "nome": "F",
+            "graus_liberdade_numerador": 2,
+            "graus_liberdade_denominador": WINDOW_SIZE_EPOCHS - 2,
+            "nota": "Hotelling T2 com covariancia real/imaginaria 2x2",
+        }
+    elif DETECTOR == "spectral_f":
+        distribuicao_nula = {
+            "nome": "F",
+            "graus_liberdade_numerador": 2,
+            "graus_liberdade_denominador": (
+                2 * WINDOW_SIZE_EPOCHS * det_registry.SPECTRAL_F_NOISE_BINS
+            ),
+            "n_bins_ruido_local": det_registry.SPECTRAL_F_NOISE_BINS,
+            "nota": "bins mais proximos que nao pertencem a freqEstim",
+        }
+    else:
+        distribuicao_nula = {"nome": "ver_detectors.py"}
+
     return {
         "nome": "matriz_emissao_B",
         "descricao": (
@@ -486,11 +581,7 @@ def construir_tabela_para_salvar(resultados):
             "passo_janela_epocas": WINDOW_STEP_EPOCHS,
             "p_value_boundaries": list(P_VALUE_BOUNDARIES),
             "alpha": SIGNIFICANCE_LEVEL,
-            "distribuicao_nula": {
-                "nome": "Beta",
-                "parametro_a": 1,
-                "parametro_b": WINDOW_SIZE_EPOCHS - 1,
-            },
+            "distribuicao_nula": distribuicao_nula,
             "uso_binsM": "controle_lateral; nao entra no calculo da estatistica",
             "k_sintetico": K_SINTETICO,
             "smoothing": SMOOTHING,

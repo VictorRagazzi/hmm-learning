@@ -5,6 +5,8 @@
 Carrega A e B, produz uma sequência de observações por arquivo/frequência,
 decodifica estados com Viterbi e aplica uma regra exploratória de detecção.
 Também executa o detector bruto como baseline sob a mesma regra temporal.
+Adiciona uma baseline separada em que cada detector usa todas as épocas de uma
+gravação em uma única estatística e agrupa as métricas por intensidade.
 
 ## Compatibilidade antes da execução
 
@@ -42,7 +44,8 @@ antes de aceitar novos valores.
 
 - `rodar_inferencia`: carrega tabelas e processa todos os arquivos.
 - `processar_arquivo`: calcula estímulos, laterais, HMM e baseline.
-- `analisar_por_nivel_db` / `analisar_por_participante`: agregações.
+- agregações por intensidade de estímulo; não imprime desempenho por
+  participante.
 - `construir_relatorio`: serializa configuração, resumo e detalhe completo.
 - `salvar_relatorio`: grava `results/inference_analysis.json`.
 
@@ -54,5 +57,7 @@ quando o detector é CSM/Rayleigh/MMSC.
 
 As frequências laterais são medidas nos próprios arquivos estimulados, o que
 captura artefatos de aquisição, mas elas não são uma amostra clínica validada
-de ausência. As taxas por dB/participante e a comparação HMM versus baseline
-são exploratórias e não substituem validação fora da amostra.
+de ausência. As taxas por dB e a comparação HMM versus baseline são
+exploratórias e não substituem validação fora da amostra. A baseline de
+gravação completa executa vários testes por gravação, então alfa por frequência
+não garante controle de 5% no nível da gravação.

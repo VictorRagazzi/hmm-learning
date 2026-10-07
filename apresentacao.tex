@@ -38,7 +38,7 @@
   \item Do sinal a uma evid\^encia espectral
   \item Da evid\^encia a uma sequ\^encia de observa\c{c}\~oes
   \item Como o HMM acrescenta contexto temporal
-  \item Limites desta proposta
+  \item Experimentos, resultados e limites
 \end{enumerate}
 
 % \vfill
@@ -368,9 +368,9 @@ com as probabilidades de emiss\~ao e transi\c{c}\~ao.
 \end{tikzpicture}
 \end{center}
 
-O caminho destacado \`e somente uma \textbf{ilustra\c{c}\~ao}. A infer\^encia \`e
-feita separadamente para cada sequ\^encia; participantes, condi\c{c}\~oes e
-frequ\^encias n\~ao s\~ao concatenados.
+O caminho destacado \`e somente uma \textbf{ilustra\c{c}\~ao}. Participantes e
+frequ\^encias permanecem separados. No experimento inicial, cada condi\c{c}\~ao
+tamb\'em era independente.
 \end{frame}
 
 % ====================================================================
@@ -405,20 +405,160 @@ frequ\^encias n\~ao s\~ao concatenados.
 \end{frame}
 
 % ====================================================================
-\begin{frame}{10. Mensagem final}
-\Large
-\begin{block}{Ideia central}
-O detector espectral fornece evid\^encia local; o HMM funciona como uma camada
-temporal que favorece sequ\^encias coerentes de estados.
+\begin{frame}{10. Por que concatenar as fases?}
+\large
+
+\begin{block}{Limita\c{c}\~ao do primeiro experimento}
+Cada arquivo continha quase sempre uma \textbf{condi\c{c}\~ao estacion\'aria}.
+O HMM atuava principalmente como um suavizador do detector bruto.
 \end{block}
 
+\begin{center}
+\begin{tikzpicture}[node distance=0.18cm,every node/.style={font=\small}]
+  \node[flowbox,fill=colAbsent!55] (esp) {ESP};
+  \node[flowbox,right=of esp,fill=colPresent!15] (d30) {30 dB};
+  \node[flowbox,right=of d30,fill=colPresent!25] (d40) {40 dB};
+  \node[flowbox,right=of d40,fill=colPresent!35] (d50) {50 dB};
+  \node[flowbox,right=of d50,fill=colPresent!45] (d60) {60 dB};
+  \node[flowbox,right=of d60,fill=colPresent!55] (d70) {70 dB};
+  \draw[arrow] (esp) -- (d30);
+  \draw[arrow] (d30) -- (d40);
+  \draw[arrow] (d40) -- (d50);
+  \draw[arrow] (d50) -- (d60);
+  \draw[arrow] (d60) -- (d70);
+\end{tikzpicture}
+\end{center}
+
 \begin{itemize}
-  \item A contribui\c{c}\~ao para a disciplina est\'a no janelamento, FFT,
-  coer\^encia e teste estat\'istico;
-  \item o HMM \`e apresentado como uma aplica\c{c}\~ao simples dessas medidas;
-  \item a configura\c{c}\~ao atual serve para estudo metodol\'ogico;
-  \item qualquer uso cl\'inico exigiria calibra\c{c}\~ao e valida\c{c}\~ao
-  independentes.
+  \item Uma sequ\^encia por \textbf{participante e frequ\^encia};
+  \item janelas nunca atravessam arquivos;
+  \item o HMM passa a observar uma poss\'ivel transi\c{c}\~ao Ausente $\to$ Presente.
+\end{itemize}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{11. Resultado explorat\'orio: ajuste no mesmo conjunto}
+\small
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Detector & \multicolumn{2}{c}{HMM} & \multicolumn{2}{c}{Bruto} & Ganho det. \\
+ & Det. & FP & Det. & FP & (p.p.) \\
+\midrule
+Rayleigh   & 79,55\% & 4,55\% & 69,32\% & 4,55\% & +10,23 \\
+MSC        & 79,55\% & 3,98\% & 77,27\% & 3,41\% & +2,28 \\
+MMSC       & 70,45\% & 2,84\% & 69,32\% & 3,98\% & +1,13 \\
+Hotelling  & \textbf{80,68\%} & 3,98\% & 78,41\% & 4,55\% & +2,27 \\
+F espectral& 79,55\% & 4,55\% & 75,00\% & 3,98\% & +4,55 \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.35cm}
+\begin{itemize}
+  \item 88 trajet\'orias: 11 participantes $\times$ 8 frequ\^encias;
+  \item o HMM superou o bruto janelado nos cinco detectores;
+  \item emiss\~oes e par\^ametros foram ajustados nos mesmos dados avaliados.
+\end{itemize}
+
+\begin{alertblock}{Resultado in-sample}
+Mostra viabilidade, mas ainda n\~ao mede generaliza\c{c}\~ao.
+\end{alertblock}
+\vspace{0.15cm}
+\footnotesize Teste discreto separado: MSC 78,4\% / 2,3\% FP; bruto 77,3\% / 3,4\% FP.
+\end{frame}
+
+% ====================================================================
+\begin{frame}{12. HMM discreto: valida\c{c}\~ao externa}
+\small
+Observa\c{c}\~oes por janelas e cinco faixas te\'oricas de p-valor; $B$
+presente usa grava\c{c}\~oes estimuladas reais. Cada dobra ajusta $B$, $A$,
+$\pi$, janela e regra nos outros dez participantes.
+
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Detector & HMM discreto & FP & Bruto janelado & FP & HMM cont. \\
+ & Det./tempo desde 30 dB & & Det./tempo desde 30 dB & & Det./FP \\
+\midrule
+Rayleigh    & 68,2\% / 1019 s & 7,95\% & 67,0\% / 1069 s & 6,25\% & 77,3\% / 6,82\% \\
+MSC         & 72,7\% / 993 s  & 3,98\% & 77,3\% / 956 s  & 3,41\% & 73,9\% / 9,66\% \\
+MMSC        & 64,8\% / 1057 s & 4,55\% & 61,4\% / 1111 s & 2,84\% & 71,6\% / 6,82\% \\
+Hotelling   & 78,4\% / 895 s  & 5,68\% & 78,4\% / 954 s  & 4,55\% & 76,1\% / 5,11\% \\
+F espectral & 75,0\% / 973 s  & 4,55\% & 75,0\% / 1007 s & 3,98\% & 72,7\% / 10,23\% \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.35cm}
+\begin{itemize}
+  \item 88 alvos + 88 laterais = 176 oportunidades negativas;
+  \item FP externo \`e reportado sem reajustar ou descartar dobras;
+  \item tempo \`e m\'edia desde 30 dB, incluindo n\~ao detectados.
+\end{itemize}
+
+\begin{alertblock}{Conclus\~ao externa}
+MSC, MMSC e F espectral mantiveram FP $\leq 5\%$. No LOSO, MMSC teve ganho
+de 3,4 pontos de detec\c{c}\~ao e m\'edia 54 s menor que o bruto, com FP 1,7
+ponto maior; MSC detectou menos que o bruto. O discreto n\~ao supera
+consistentemente o cont\'inuo. Resultado explorat\'orio, n\~ao cl\'inico.
+\end{alertblock}
+\end{frame}
+
+% ====================================================================
+\begin{frame}{13. Como interpretar o tempo de detec\c{c}\~ao}
+\large
+\begin{block}{Os $\sim$1000 s n\~ao s\~ao tempo de processamento}
+S\~ao dura\c{c}\~ao simulada do exame, com condi\c{c}\~oes anteriores e casos
+n\~ao detectados.
+\end{block}
+
+\begin{columns}[T]
+\column{0.48\textwidth}
+\textbf{MSC-HMM in-sample}
+\begin{itemize}
+  \item m\'edia: 674 s desde 30 dB;
+  \item mediana: 660 s;
+  \item apenas casos detectados.
+\end{itemize}
+
+\column{0.48\textwidth}
+\textbf{Primeira detec\c{c}\~ao}
+\begin{itemize}
+  \item 30 dB: 28;
+  \item 40 dB: 30;
+  \item 50--60 dB: 12;
+  \item nunca: 18.
+\end{itemize}
+\end{columns}
+
+\vfill
+58/88 trajet\'orias foram detectadas at\'e 40 dB. A mediana de 660 s equivale,
+aproximadamente, a 480 s em 30 dB + 180 s em 40 dB.
+\end{frame}
+
+% ====================================================================
+\begin{frame}{14. Mensagem final}
+\small
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Detector & Discreto IS & Discreto LOSO & Bruto LOSO & Cont. LOSO \\
+ & Det./FP & Det./FP & Det./FP & Det./FP \\
+\midrule
+Rayleigh & 71,6/4,5\% & 68,2/8,0\% & 67,0/6,2\% & 77,3/6,8\% \\
+MSC & 78,4/2,3\% & 72,7/4,0\% & 77,3/3,4\% & 73,9/9,7\% \\
+MMSC & 64,8/4,0\% & 64,8/4,5\% & 61,4/2,8\% & 71,6/6,8\% \\
+Hotelling & 69,3/4,0\% & 78,4/5,7\% & 78,4/4,5\% & 76,1/5,1\% \\
+F espectral & 68,2/3,4\% & 75,0/4,5\% & 75,0/4,0\% & 72,7/10,2\% \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.35cm}
+\begin{itemize}
+  \item A vers\~ao discreta \`e explic\'avel, mas n\~ao supera o HMM cont\'inuo
+  de forma consistente no teste externo;
+  \item MMSC oferece uma troca promissora de tempo por FP, ainda explorat\'oria;
+  \item calibra\c{c}\~ao e valida\c{c}\~ao independentes seriam necess\'arias
+  antes de qualquer interpreta\c{c}\~ao cl\'inica.
 \end{itemize}
 
 \vfill
@@ -428,7 +568,7 @@ resultado cl\'inico.
 \end{frame}
 
 \frame
-{\frametitle{\LARGE 11. Referências}
+{\frametitle{\LARGE 15. Referências}
 \large
 
 \begin{itemize}

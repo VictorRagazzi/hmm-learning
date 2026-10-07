@@ -26,6 +26,7 @@ em mente.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable
 
 import numpy as np
@@ -33,6 +34,7 @@ from scipy.stats import beta as beta_dist
 from scipy.stats import f as f_dist
 
 EPS = 1e-12
+SPECTRAL_F_NOISE_BINS = 2
 
 
 @dataclass(frozen=True)
@@ -122,24 +124,23 @@ RAYLEIGH = Detector(
 
 
 # ============================================================
-# 3) CSM - aqui implementado como o teste T^2 de Hotelling sobre a media
-#    complexa (as vezes chamado de "T2circ" na literatura de ASSR: John &
-#    Picton, 2000). Testa se a media complexa dos coeficientes e
-#    significativamente diferente de zero, usando um estimador de variancia
-#    residual (diferente do estimador usado na MSC).
+# 3) CSM - teste T^2 circular de Hotelling sobre a media complexa. Sob as
+#    mesmas hipoteses gaussianas e variancia circular da MSC, e algebricamente
+#    equivalente a MSC; permanece como uma forma classica alternativa de
+#    expressar o mesmo teste, nao como evidencia independente.
 # ============================================================
-# F = (M-1) * |media|^2 / variancia_residual  ~  F(2, 2(M-1)) sob H0.
+# F = M * |media|^2 / variancia_residual  ~  F(2, 2(M-1)) sob H0.
 # Para reaproveitar a mesma discretizacao/threshold em escala [0,1] dos
 # outros detectores, a estatistica reportada e a transformacao monotonica
 # msc_equivalente = F / (F + (M-1)), que preserva a ordenacao de evidencia
-# mas usa o estimador de variancia proprio do teste T^2/F (nao o da MSC).
+# sua transformacao F/(F+M-1) e exatamente a MSC sob esse estimador.
 
 def _csm_estatistica_f(janela):
     m = len(janela)
     media = np.mean(janela)
     residuos = janela - media
     s2 = float(np.sum(np.abs(residuos) ** 2)) / (m - 1)
-    f_stat = (m - 1) * (np.abs(media) ** 2) / (s2 + EPS)
+    f_stat = m * (np.abs(media) ** 2) / (s2 + EPS)
     return f_stat, m
 
 
@@ -163,12 +164,11 @@ CSM = Detector(
     nome="csm",
     nome_exibicao="CSM (T^2 de Hotelling sobre a media complexa)",
     descricao=(
-        "Testa se a media complexa dos coeficientes difere de zero, usando "
-        "um estimador de variancia residual proprio (T2circ, John & Picton, "
-        "2000). F = (M-1)*|media|^2/variancia ~ F(2, 2(M-1)). "
-        "Matematicamente relacionado a MSC por uma transformacao monotonica, "
-        "mas reportado como teste separado por usar outro estimador de "
-        "variancia e ser uma referencia classica distinta na literatura."
+        "Teste T2 circular de Hotelling sobre a media complexa. Com o "
+        "estimador circular de variancia, F = M*|media|^2/s2 ~ "
+        "F(2, 2(M-1)); a transformacao para [0,1] e algebricamente igual "
+        "a MSC sob as mesmas hipoteses. E uma formulacao alternativa, nao "
+        "um detector independente da MSC."
     ),
     estatistica=_csm_stat,
     p_value=_csm_pvalue,
@@ -179,13 +179,9 @@ CSM = Detector(
 # ============================================================
 # 4) MMSC - MSC media entre duas metades da janela (split-half)
 # ============================================================
-# Divide a janela de M epocas em duas metades de M//2 epocas, calcula a MSC
-# em cada metade separadamente e usa a media das duas. Isso da uma
-# estatistica menos sensivel a uma unica meia-janela ruidosa. O p-valor e
-# aproximado tratando a MSC media como Beta(1, M//2 - 1) (aproximacao
-# conservadora: a soma/media de duas Betas independentes nao e exatamente
-# Beta, mas essa aproximacao e simples e funciona bem na pratica para
-# ordenar evidencia).
+# Divide a janela em duas metades. Sob H0, cada MSC tem distribuicao
+# Beta(1, h-1); a media de duas dessas variaveis tem uma distribuicao de
+# convolucao, calculada numericamente em uma tabela interpolada.
 
 def _mmsc_m_efetivo(m):
     return max(m // 2, 2)
@@ -201,24 +197,50 @@ def _mmsc_stat(janela):
     return float(np.clip((msc_1 + msc_2) / 2.0, 0.0, 1.0))
 
 
+@lru_cache(maxsize=None)
+def _mmsc_null_table(m):
+    """Tabela da cauda nula da media de duas MSCs independentes."""
+    b = _mmsc_m_efetivo(m) - 1
+    grid = np.linspace(0.0, 1.0, 8193)
+    t = 2.0 * grid
+    lower = np.maximum(0.0, t - 1.0)
+    upper = np.minimum(1.0, t)
+    nodes, weights = np.polynomial.legendre.leggauss(64)
+    x = lower[:, None] + (nodes[None, :] + 1.0) * (
+        upper - lower
+    )[:, None] / 2.0
+    density = b * np.power(np.maximum(1.0 - x, 0.0), b - 1)
+    y = np.clip(t[:, None] - x, 0.0, 1.0)
+    cdf_y = 1.0 - np.power(1.0 - y, b)
+    integral = (upper - lower) / 2.0 * np.sum(
+        weights[None, :] * density * cdf_y, axis=1
+    )
+    cdf = 1.0 - np.power(1.0 - lower, b) + integral
+    cdf = np.maximum.accumulate(np.clip(cdf, 0.0, 1.0))
+    return grid, np.clip(1.0 - cdf, 0.0, 1.0)
+
+
 def _mmsc_pvalue(valor, m):
-    m_ef = _mmsc_m_efetivo(m)
-    return float(beta_dist.sf(valor, 1, m_ef - 1))
+    grid, tail = _mmsc_null_table(m)
+    return float(np.interp(np.clip(valor, 0.0, 1.0), grid, tail))
 
 
 def _mmsc_thresholds(m, p_boundaries):
-    m_ef = _mmsc_m_efetivo(m)
-    return beta_dist.isf(np.asarray(p_boundaries, dtype=float), 1, m_ef - 1)
+    grid, tail = _mmsc_null_table(m)
+    return np.interp(
+        np.asarray(p_boundaries, dtype=float), tail[::-1], grid[::-1]
+    )
 
 
 MMSC = Detector(
     nome="mmsc",
     nome_exibicao="MMSC (MSC media entre sub-janelas / split-half)",
     descricao=(
-        "Divide a janela em duas metades, calcula a MSC em cada uma e usa a "
-        "media das duas. Reduz a chance de uma metade ruidosa dominar a "
-        "decisao, ao custo de M/2 epocas por metade. P-valor aproximado por "
-        "Beta(1, M//2 - 1) (conservador, nao exato)."
+        "Estatistica experimental split-half: divide a janela em duas "
+        "metades, calcula MSC em cada uma e usa a media. O p-valor usa a "
+        "convolucao numerica das duas distribuicoes Beta independentes sob "
+        "H0. Isso calibra a estatistica implementada, mas nao implica que o "
+        "método seja superior a MSC."
     ),
     estatistica=_mmsc_stat,
     p_value=_mmsc_pvalue,
@@ -226,7 +248,111 @@ MMSC = Detector(
 )
 
 
-DETECTOR_REGISTRY = {d.nome: d for d in (MSC, MMSC, RAYLEIGH, CSM)}
+# ============================================================
+# 5) Hotelling T2 geral sobre partes real e imaginaria
+# ============================================================
+
+def _hotelling_f(janela):
+    valores = np.asarray(janela)
+    m = len(valores)
+    if m <= 2:
+        return 0.0, m
+    xy = np.column_stack((valores.real, valores.imag))
+    media = np.mean(xy, axis=0)
+    cov = np.cov(xy, rowvar=False, ddof=1)
+    inversa = np.linalg.pinv(cov, hermitian=True)
+    t2 = m * float(media @ inversa @ media)
+    f_stat = (m - 2) * t2 / (2 * (m - 1))
+    return max(float(f_stat), 0.0), m
+
+
+def _hotelling_stat(janela):
+    f_stat, _ = _hotelling_f(janela)
+    return float(np.clip(f_stat / (1.0 + f_stat), 0.0, 1.0))
+
+
+def _hotelling_pvalue(valor, m):
+    if m <= 2:
+        return 1.0
+    f_stat = valor / (1.0 - valor + EPS)
+    return float(f_dist.sf(f_stat, 2, m - 2))
+
+
+def _hotelling_thresholds(m, p_boundaries):
+    if m <= 2:
+        return np.ones_like(np.asarray(p_boundaries, dtype=float))
+    f_thresh = f_dist.isf(np.asarray(p_boundaries, dtype=float), 2, m - 2)
+    return f_thresh / (1.0 + f_thresh)
+
+
+HOTELLING = Detector(
+    nome="hotelling",
+    nome_exibicao="Hotelling T2 geral (real/imaginario)",
+    descricao=(
+        "Testa media complexa zero estimando a covariancia 2x2 completa das "
+        "partes real e imaginaria. Sob normalidade multivariada, a forma "
+        "escalada segue F(2, M-2). Nao impoe variancia circular."
+    ),
+    estatistica=_hotelling_stat,
+    p_value=_hotelling_pvalue,
+    thresholds=_hotelling_thresholds,
+)
+
+
+# ============================================================
+# 6) F espectral local: alvo coerente / potencia de bins de ruido
+# ============================================================
+
+def _spectral_f_value(janela):
+    valores = np.asarray(janela)
+    if valores.ndim != 2 or valores.shape[1] != 1 + SPECTRAL_F_NOISE_BINS:
+        raise ValueError(
+            "spectral_f requer matriz (epocas, 1 alvo + "
+            f"{SPECTRAL_F_NOISE_BINS} bins de ruido)"
+        )
+    m = len(valores)
+    alvo = valores[:, 0]
+    ruido = valores[:, 1:]
+    potencia_coerente = m * np.abs(np.mean(alvo)) ** 2
+    potencia_ruido = float(np.mean(np.abs(ruido) ** 2))
+    return max(float(potencia_coerente / (potencia_ruido + EPS)), 0.0), m
+
+
+def _spectral_f_stat(janela):
+    f_stat, _ = _spectral_f_value(janela)
+    return float(np.clip(f_stat / (1.0 + f_stat), 0.0, 1.0))
+
+
+def _spectral_f_pvalue(valor, m):
+    f_stat = valor / (1.0 - valor + EPS)
+    return float(f_dist.sf(f_stat, 2, 2 * m * SPECTRAL_F_NOISE_BINS))
+
+
+def _spectral_f_thresholds(m, p_boundaries):
+    f_thresh = f_dist.isf(
+        np.asarray(p_boundaries, dtype=float),
+        2, 2 * m * SPECTRAL_F_NOISE_BINS,
+    )
+    return f_thresh / (1.0 + f_thresh)
+
+
+SPECTRAL_F = Detector(
+    nome="spectral_f",
+    nome_exibicao="F espectral local (alvo coerente / ruido lateral)",
+    descricao=(
+        "Compara M*|media complexa no alvo|^2 com a potencia media em dois "
+        "bins locais sem estimulo. Sob bins complexos gaussianos, circulares "
+        "e independentes com mesma variancia, segue F(2, 4M)."
+    ),
+    estatistica=_spectral_f_stat,
+    p_value=_spectral_f_pvalue,
+    thresholds=_spectral_f_thresholds,
+)
+
+
+DETECTOR_REGISTRY = {
+    d.nome: d for d in (MSC, MMSC, RAYLEIGH, CSM, HOTELLING, SPECTRAL_F)
+}
 
 
 def obter_detector(nome):
