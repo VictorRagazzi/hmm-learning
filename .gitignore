@@ -1,12 +1,6 @@
 .venv/
 __pycache__/
 *.py[cod]
-logs/*.jsonl
-src/logs/*.jsonl
-figs/
 data/
-logs/
-signal_detection/
-videos/
 results/
 outputs/

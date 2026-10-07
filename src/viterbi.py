@@ -1,120 +1,62 @@
-"""Exemplo didático do algoritmo de Viterbi para um HMM discreto."""
+"""Viterbi em log-espaço: caminho completo e melhores estados a cada prefixo."""
 
-# Os índices destas listas identificam estados e observações nas matrizes.
-states = ["Sol", "Chuva"]
-symbols = ["caminhar", "comprar", "limpar"]
-
-# pi[i] = P(estado inicial = i).
-pi = [0.6, 0.4]
-
-# A[i][j] = P(próximo estado = j | estado atual = i).
-A = [
-    [0.7, 0.3],
-    [0.4, 0.6],
-]
-
-# B[i][k] = P(observação = k | estado atual = i).
-B = [
-    [0.1, 0.4, 0.5],
-    [0.6, 0.3, 0.1],
-]
-
-# A sequência fixa permite comparar o resultado com contas feitas à mão.
-observations = [1, 1, 1, 0 , 1, 1, 1, 1, 2, 1, 1, 1]
+import numpy as np
 
 
-def mpe_inference(pi, A, B, observations):
+def validar_probabilidades(a, pi):
+    a, pi = np.asarray(a, dtype=float), np.asarray(pi, dtype=float)
+    if (a.shape != (2, 2) or pi.shape != (2,) or not np.all(np.isfinite(a))
+            or not np.all(np.isfinite(pi)) or np.any(a < 0) or np.any(pi < 0)
+            or not np.allclose(a.sum(axis=1), 1) or not np.isclose(pi.sum(), 1)):
+        raise ValueError("A deve ser 2x2, pi deve ter 2 entradas, com probabilidades normalizadas")
+    return a, pi
+
+
+def viterbi(log_b, a, pi):
+    """log_b[t,j] = log da densidade da observação t no estado j.
+
+    O caminho completo usa backtracking. Para primeira detecção, use somente
+    os estados causais: o melhor estado terminal de cada prefixo observado.
     """
-    Recebe os parâmetros do HMM e uma sequência de observações (índices de B).
-    Retorna a sequência de estados mais provável (MPE) e o score.
-    Esta função concentra TODO o algoritmo de Viterbi.
-    No futuro, pode ser substituída por uma versão que consulta um LLM.
+    a, pi = validar_probabilidades(a, pi)
+    log_b = np.asarray(log_b)
+    if log_b.ndim != 2 or log_b.shape[1] != 2 or not np.all(np.isfinite(log_b)):
+        raise ValueError("Emissões devem ser uma matriz finita de tamanho T x 2")
+    if len(log_b) == 0:
+        return np.array([], dtype=int), np.array([], dtype=int)
+    with np.errstate(divide="ignore"):
+        log_a, log_pi = np.log(a), np.log(pi)
+    delta = log_pi + log_b[0]
+    anteriores = np.zeros((len(log_b), 2), dtype=int)
+    causais = [int(np.argmax(delta))]
+    for t in range(1, len(log_b)):
+        candidatos = delta[:, None] + log_a
+        anteriores[t] = np.argmax(candidatos, axis=0)
+        delta = np.max(candidatos, axis=0) + log_b[t]
+        causais.append(int(np.argmax(delta)))
+    caminho = np.zeros(len(log_b), dtype=int)
+    caminho[-1] = np.argmax(delta)
+    for t in range(len(log_b) - 1, 0, -1):
+        caminho[t - 1] = anteriores[t, caminho[t]]
+    return caminho, np.asarray(causais)
+
+
+def viterbi_lote(log_b, candidatos):
+    """Mesma recorrência causal para várias A/pi e sequências, usada na busca.
+
+    Eixos de log_b: sequência, tempo, estado. Eixos de saída: candidato,
+    sequência, tempo. NumPy calcula as combinações simultaneamente.
     """
-    if not observations:
-        raise ValueError("A sequência de observações não pode ser vazia.")
-
-    number_of_states = len(pi)
-    number_of_times = len(observations)
-
-    # trellis[estado][tempo] guarda a probabilidade do melhor caminho que
-    # termina naquele estado, após observar os símbolos até aquele tempo.
-    # backpointers[estado][tempo] guarda o estado anterior desse melhor caminho.
-    trellis = [[0.0] * number_of_times for _ in range(number_of_states)]
-    backpointers = [[None] * number_of_times for _ in range(number_of_states)]
-
-    # Inicialização: no tempo 0, só há a probabilidade inicial do estado
-    # multiplicada pela probabilidade de emitir a primeira observação.
-    for state in range(number_of_states):
-        trellis[state][0] = pi[state] * B[state][observations[0]]
-
-    # Recursão: para cada estado atual, experimentamos todos os estados
-    # anteriores. Cada candidato multiplica a melhor probabilidade anterior
-    # pela transição e pela emissão da observação atual.
-    for time in range(1, number_of_times):
-        observation = observations[time]
-        for state in range(number_of_states):
-            best_previous_state = 0
-            best_probability = (
-                trellis[0][time - 1] * A[0][state] * B[state][observation]
-            )
-
-            for previous_state in range(1, number_of_states):
-                probability = (
-                    trellis[previous_state][time - 1]
-                    * A[previous_state][state]
-                    * B[state][observation]
-                )
-                if probability > best_probability:
-                    best_probability = probability
-                    best_previous_state = previous_state
-
-            trellis[state][time] = best_probability
-            backpointers[state][time] = best_previous_state
-
-    # Terminação: escolhemos o estado final com a maior probabilidade
-    # acumulada. Esse valor é o score do caminho inteiro, não uma soma.
-    final_state = 0
-    score = trellis[0][number_of_times - 1]
-    for state in range(1, number_of_states):
-        if trellis[state][number_of_times - 1] > score:
-            score = trellis[state][number_of_times - 1]
-            final_state = state
-
-    # Backtracking: partimos do melhor estado final e seguimos os ponteiros
-    # para trás até reconstruir o caminho ótimo desde o tempo 0.
-    path = [0] * number_of_times
-    path[-1] = final_state
-    for time in range(number_of_times - 1, 0, -1):
-        path[time - 1] = backpointers[path[time]][time]
-
-    # Exibimos o trellis completo. O asterisco marca a célula escolhida
-    # no caminho ótimo em cada coluna de tempo.
-    print("Trellis (probabilidade; * = caminho escolhido):")
-    print(" " * 12 + "".join(f"{'t=' + str(time):>15}" for time in range(number_of_times)))
-    for state in range(number_of_states):
-        cells = [
-            f"{trellis[state][time]:.6e}{'*' if path[time] == state else ' '}"
-            for time in range(number_of_times)
-        ]
-        print(f"Estado {state:<5}" + "".join(f"{cell:>15}" for cell in cells))
-
-    # Cada ponteiro indica a linha de origem da melhor transição.
-    # No tempo 0 não existe estado anterior, por isso mostramos '-'.
-    print("\nBackpointers (estado anterior escolhido):")
-    print(" " * 12 + "".join(f"{'t=' + str(time):>15}" for time in range(number_of_times)))
-    for state in range(number_of_states):
-        cells = [
-            f"{backpointers[state][time] if time > 0 else '-':>15}"
-            for time in range(number_of_times)
-        ]
-        print(f"Estado {state:<5}" + "".join(cells))
-
-    return path, score
-
-
-if __name__ == "__main__":
-    print("Observações:", [symbols[index] for index in observations])
-    path, score = mpe_inference(pi, A, B, observations)
-    print("\nEstados escolhidos (índices):", path)
-    print("Sequência de estados:", [states[index] for index in path])
-    print(f"Score do caminho: {score:.6e}")
+    estados = np.zeros((len(candidatos), *log_b.shape[:2]), dtype=bool)
+    if log_b.shape[1] == 0:
+        return estados
+    with np.errstate(divide="ignore"):
+        log_a = np.log([c["A"] for c in candidatos])
+        log_pi = np.log([c["pi"] for c in candidatos])
+    delta = log_pi[:, None, :] + log_b[None, :, 0, :]
+    estados[:, :, 0] = delta[:, :, 1] > delta[:, :, 0]
+    for t in range(1, log_b.shape[1]):
+        transicoes = delta[:, :, :, None] + log_a[:, None, :, :]
+        delta = np.max(transicoes, axis=2) + log_b[None, :, t, :]
+        estados[:, :, t] = delta[:, :, 1] > delta[:, :, 0]
+    return estados

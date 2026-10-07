@@ -1,1090 +1,155 @@
-"""Busca exploratoria de parametros para a decisao do HMM.
-
-Alem da regra de decisao (MIN_CONSECUTIVE, MIN_PERCENT, MODO_REGRA_DECISAO),
-esta versao tambem varia:
-
-  - PI_INICIAL: distribuicao inicial usada pelo Viterbi, com probabilidade
-    inicial de Ausente entre 0.50 e 0.99.
-  - K_SINTETICO: amplitude do tom sintetico usado para calibrar B(Presente)
-    em get_obs_matrix.py.
-  - Matriz A: probabilidades de autopermanencia dos estados Ausente e
-    Presente, avaliadas por forca bruta. A matriz heuristica salva continua
-    incluida como candidata, mas nao e tratada como transicao observada.
-
-CACHE EM 3 NIVEIS (do mais caro para o mais barato), para nao recalcular o
-que nao precisa:
-
-  1. Deteccao bruta (labels/p-values) nos arquivos *dB.mat: NAO depende de
-     K_SINTETICO nem de PI_INICIAL -- a injecao sintetica so acontece na
-     calibracao de B, sobre os arquivos ESP, nunca sobre os arquivos de
-     estimulo. Por isso e calculada UMA UNICA VEZ para toda a busca.
-  2. Matriz B: depende de K_SINTETICO (via
-     get_obs_matrix.construir_matrizes_observacao, que reprocessa os
-     arquivos ESP). Recalculada uma vez por valor de K_SINTETICO testado.
-  3. Viterbi + regra de decisao: depende de (B, PI_INICIAL,
-     MIN_CONSECUTIVE, MIN_PERCENT, MODO_REGRA_DECISAO). O Viterbi roda uma
-     vez por combinacao (K_SINTETICO, PI_INICIAL); a regra de decisao e
-     reavaliada sem custo extra, em cima do mesmo caminho de estados, para
-     todas as combinacoes de MIN_CONSECUTIVE/MIN_PERCENT/MODO -- exatamente
-     como no script original.
-
-O "teto do detector bruto sozinho" nao depende de B nem de Viterbi (ele nao
-usa nenhum dos dois), entao tambem e calculado uma unica vez, fora do loop
-principal, em vez de ser recalculado a cada combinacao de K_SINTETICO/PI_INICIAL.
-
-EXCLUSAO AUTOMATICA POR FP (novidade pedida): combinacoes do HMM com taxa de
-falso positivo lateral acima de FP_MAXIMO_HMM sao descartadas da selecao do
-melhor resultado, mesmo que teriam a melhor acuracia balanceada. Isso e
-importante porque acuracia_balanceada = (deteccao + especificidade) / 2
-pondera deteccao e FP igualmente, entao uma combinacao com deteccao muito
-alta e FP tambem alto pode "ganhar" de uma combinacao mais segura na hora do
-desempate por acuracia balanceada. O corte automatico evita isso, cortando
-antes da comparacao. Ele NAO se aplica ao teto do detector bruto sozinho, que
-continua sendo reportado sem filtro, como referencia do que da pra tirar do
-detector sem HMM.
-
-O resumo da busca e salvo atomicamente em
-``results/search_hmm_parameters.json``. Cada combinacao concluida e gravada,
-e ``--resume`` retoma combinacoes completas de uma execucao interrompida.
-"""
+"""Busca em grade de janela, passo, A, pi e regra; todos os pacientes no ajuste."""
 
 import argparse
-import glob
-import json
-import os
-import tempfile
 from itertools import product
 
 import numpy as np
 
-import get_obs_matrix as gom
-
-# ATENCAO: no script original o import era `from hmm_inference import ...`
-# (h-h-m em vez de h-m-m). Mantive o mesmo nome de modulo aqui para nao
-# quebrar o que ja funciona no seu projeto -- confira se e mesmo o nome do
-# arquivo (parece um typo, mas so voce sabe se foi proposital).
-import hmm_inference as hmi
-
-
-# ============================================================
-# ESPACO DE BUSCA
-# ============================================================
-
-MIN_CONSECUTIVE_VALUES = range(1, 13)
-MIN_PERCENT_VALUES = (0.01, 0.025, 0.05, 0.075, 0.09,
-                       0.10, 0.20, 0.30, 0.40, 0.50,
-                       0.60, 0.70, 0.80, 0.90, 1.00)
-MODO_REGRA_DECISAO_VALUES = ("OR", "AND")
-
-# Cada tupla deve somar 1 e seguir a mesma ordem de gom.ESTADOS
-# (["Ausente", "Presente"]).
-PI_INICIAL_VALUES = (
-    (0.99, 0.01),
-    (0.95, 0.05),
-    (0.90, 0.10),
-    (0.85, 0.15),
-    (0.80, 0.20),
-    (0.75, 0.25),
-    (0.70, 0.30),
-    (0.65, 0.35),
-    (0.60, 0.40),
-    (0.55, 0.45),
-    (0.50, 0.50),
-)
-
-PERSISTENCE_VALUES = tuple(pi[0] for pi in PI_INICIAL_VALUES)
-
-# Amplitude do tom sintetico (em unidades de desvio-padrao da epoca) usada
-# para calibrar B(Presente) em get_obs_matrix.py.
-K_SINTETICO_VALUES = (0.005, 0.01, 0.02, 0.05, 0.1)
-# K_SINTETICO_VALUES = (0.01,)
-
-# Grade de persistencia da matriz A. Cada par gera:
-# [[p_ausente, 1-p_ausente], [1-p_presente, p_presente]]. A matriz heuristica
-# de transition_matrix.json tambem entra automaticamente como candidata.
-P_SELF_AUSENTE_VALUES = PERSISTENCE_VALUES
-P_SELF_PRESENTE_VALUES = PERSISTENCE_VALUES
-
-# Corte automatico de falso positivo, SO para a selecao do melhor resultado
-# do HMM (nao afeta o teto do detector bruto sozinho).
-FP_MAXIMO_HMM = 0.05
-
-# CSM circular e MSC sao equivalentes sob o nulo do codigo. Nao os combinamos
-# como evidencias independentes; hmi.validar_combinacoes tambem rejeita essa
-# combinacao para evitar dupla contagem.
-DETECTOR_COMBINATIONS = [
-    ("csm",),
-    ("msc",),
-    ("mmsc",),
-    ("rayleigh",),
-    ("rayleigh", "csm"),
-    ("rayleigh", "msc"),
-    ("rayleigh", "mmsc"),
-    ("csm", "mmsc"),
-    ("mmsc", "msc"),
-    ("rayleigh", "csm", "mmsc"),
-    ("rayleigh", "mmsc", "msc"),
-]
-
-SEARCH_OUTPUT_FILE = os.path.join("results", "search_hmm_parameters.json")
-
-# ============================================================
-# VALIDACAO
-# ============================================================
-
-def validar_espaco_busca():
-    for pi in PI_INICIAL_VALUES:
-        if len(pi) != len(gom.ESTADOS):
-            raise ValueError(
-                f"PI_INICIAL {pi} tem tamanho diferente de ESTADOS {gom.ESTADOS}"
-            )
-        if not np.isclose(sum(pi), 1.0):
-            raise ValueError(f"PI_INICIAL {pi} nao soma 1")
-    if any(k <= 0 for k in K_SINTETICO_VALUES):
-        raise ValueError("K_SINTETICO_VALUES deve conter apenas valores positivos")
-    for nome, valores in (
-        ("P_SELF_AUSENTE_VALUES", P_SELF_AUSENTE_VALUES),
-        ("P_SELF_PRESENTE_VALUES", P_SELF_PRESENTE_VALUES),
-    ):
-        if not valores or any(not 0 < valor < 1 for valor in valores):
-            raise ValueError(f"{nome} deve conter probabilidades entre 0 e 1")
-    if not 0 < FP_MAXIMO_HMM < 1:
-        raise ValueError("FP_MAXIMO_HMM deve estar entre 0 e 1")
+import config
+from dados import carregar_dados, preparar_protocolos, salvar_json
+from get_obs_matrix import construir_matrizes_observacao, log_emissoes
+from get_tran_matrix import construir_matriz_transicao
+from hmm_inference import avaliar, resumir
+from viterbi import viterbi_lote
 
 
-def construir_candidatas_matriz_a(matriz_heuristica):
-    """Monta a grade de A e inclui a heuristica salva, removendo duplicatas."""
-    candidatas = [("heuristica", np.asarray(matriz_heuristica, dtype=float))]
-    for p_ausente, p_presente in product(
-        P_SELF_AUSENTE_VALUES, P_SELF_PRESENTE_VALUES
-    ):
-        matriz = np.asarray([
-            [p_ausente, 1.0 - p_ausente],
-            [1.0 - p_presente, p_presente],
-        ])
-        if not any(np.allclose(matriz, existente) for _, existente in candidatas):
-            candidatas.append((f"A={p_ausente:.3f}/{p_presente:.3f}", matriz))
-    return candidatas
+def construir_grade(rapida=False):
+    """Listas explícitas de possibilidades; --rapida serve só para verificar execução."""
+    janelas = (90,) if rapida else config.WINDOW_SIZE_VALUES
+    probabilidades = (.8, .55) if rapida else config.PERSISTENCE_VALUES
+    pi_values = (.9,) if rapida else config.PI_ABSENT_VALUES
+    consecutivas = (1, 3) if rapida else config.MIN_CONSECUTIVE_VALUES
+    percentuais = (.1, .6) if rapida else config.MIN_PERCENT_VALUES
+    regras = [{"consecutivas": c, "percentual": p, "modo": modo}
+              for c, p, modo in product(consecutivas, percentuais, ("OR", "AND"))]
+    regras += [{"consecutivas": c, "percentual": None, "modo": "OR"} for c in consecutivas]
+    regras += [{"consecutivas": None, "percentual": p, "modo": "OR"} for p in percentuais]
+    return {"janelamentos": [(m, passo) for m in janelas for passo in (m // 2, m)],
+            "persistencias": probabilidades, "pi_ausente": pi_values, "regras": regras}
 
 
-# ============================================================
-# NIVEL 1 - DETECCAO BRUTA (independente de K_SINTETICO e PI_INICIAL)
-# ============================================================
+def candidatos_temporais(grade, a_heuristica):
+    matrizes = [[[a, 1 - a], [1 - b, b]]
+                for a, b in product(grade["persistencias"], repeat=2)]
+    for a in (a_heuristica, config.MATRIX_A):
+        if not any(np.allclose(a, outra) for outra in matrizes):
+            matrizes.append(a)
+    return [{"A": a, "pi": [p, 1 - p]} for a, p in product(matrizes, grade["pi_ausente"])]
 
-def computar_deteccao_bruta(pasta_dados):
-    """Roda o detector (sem Viterbi, sem B) uma unica vez, em todos os
-    arquivos *dB.mat, nas frequencias de estimulo e nas laterais.
 
-    Reusa exatamente as funcoes de leitura/deteccao de get_obs_matrix.py e
-    hmm_inference.py -- nenhuma logica de deteccao e duplicada aqui.
+def preparar_lote(protocolos):
+    """Completa sequências curtas com padding; a máscara impede que ele conte."""
+    tamanho = max(len(p["observacoes"]) for p in protocolos)
+    p_values = np.full((len(protocolos), tamanho), .5)
+    validos = np.zeros_like(p_values, dtype=bool)
+    escopo = np.zeros_like(p_values, dtype=bool)
+    alvos = np.array([p["grupo"] == "alvo" for p in protocolos])
+    for i, protocolo in enumerate(protocolos):
+        obs = protocolo["observacoes"]
+        p_values[i, :len(obs)] = [o["p_value"] for o in obs]
+        validos[i, :len(obs)] = True
+        escopo[i, :len(obs)] = [o["nivel"] != "ESP" or not alvos[i] for o in obs]
+    return p_values, validos, escopo, alvos
+
+
+def contar_regras(estados, validos, escopo, alvos, regras):
+    """Conta detecções/FP sem repetir Viterbi para cada regra.
+
+    Para AND, consecutivas e percentual precisam passar no mesmo instante.
+    Eixos: candidato A/pi, protocolo, tempo.
     """
-    thresholds = gom.calcular_thresholds_msc(
-        gom.WINDOW_SIZE_EPOCHS, gom.P_VALUE_BOUNDARIES
-    )
-
-    caminhos = sorted(glob.glob(os.path.join(pasta_dados, hmi.PRESENT_PATTERN)))
-    if not caminhos:
-        raise RuntimeError(
-            f"Nenhum arquivo encontrado em {pasta_dados} com padrao "
-            f"{hmi.PRESENT_PATTERN}"
-        )
-
-    arquivos_processados = []
-    for caminho in caminhos:
-        participante, condicao, nivel_db = hmi.parse_nome_arquivo(caminho)
-        dados_mat = hmi.carregar_mat_estimulo(caminho)
-
-        por_frequencia_estimulo = {}
-        for freq_alvo in dados_mat["freq_estim"]:
-            _labels, _msc, p_values, _intervalos = hmi.construir_sequencia_labels(
-                dados_mat["x"], gom.CHANNEL_INDEX, dados_mat["fs"], freq_alvo,
-                thresholds,
-            )
-            por_frequencia_estimulo[float(freq_alvo)] = {"p_values": p_values}
-
-        por_frequencia_lateral = {}
-        for freq_lateral in dados_mat["bins_m"]:
-            _labels, _msc, p_values, _intervalos = hmi.construir_sequencia_labels(
-                dados_mat["x"], gom.CHANNEL_INDEX, dados_mat["fs"], freq_lateral,
-                thresholds,
-            )
-            por_frequencia_lateral[float(freq_lateral)] = {"p_values": p_values}
-
-        # As labels acima ja usam o detector (MSC) e os thresholds fixos;
-        # guardamos so os p_values aqui porque, para o Viterbi, precisamos
-        # recomputar as labels caso os thresholds mudem -- mas como
-        # WINDOW_SIZE_EPOCHS/P_VALUE_BOUNDARIES sao fixos nesta busca,
-        # guardamos tambem as labels para reusar no Viterbi sem refazer FFT.
-        for freq_alvo in dados_mat["freq_estim"]:
-            labels, _msc, _p, _int = hmi.construir_sequencia_labels(
-                dados_mat["x"], gom.CHANNEL_INDEX, dados_mat["fs"], freq_alvo,
-                thresholds,
-            )
-            por_frequencia_estimulo[float(freq_alvo)]["labels"] = labels
-        for freq_lateral in dados_mat["bins_m"]:
-            labels, _msc, _p, _int = hmi.construir_sequencia_labels(
-                dados_mat["x"], gom.CHANNEL_INDEX, dados_mat["fs"], freq_lateral,
-                thresholds,
-            )
-            por_frequencia_lateral[float(freq_lateral)]["labels"] = labels
-
-        arquivos_processados.append({
-            "arquivo": caminho,
-            "participante": participante,
-            "nivel_db": nivel_db,
-            "por_frequencia_estimulo": por_frequencia_estimulo,
-            "por_frequencia_lateral": por_frequencia_lateral,
-        })
-
-    return arquivos_processados
+    estados = estados & validos[None]
+    corridas = np.zeros(estados.shape, dtype=int)
+    for t in range(estados.shape[2]):
+        anterior = corridas[:, :, t - 1] if t else 0
+        corridas[:, :, t] = (anterior + 1) * estados[:, :, t]
+    fracoes = estados.cumsum(axis=2) / np.arange(1, estados.shape[2] + 1)
+    # initial trata protocolos sem nenhuma janela, mantendo-os no denominador.
+    max_corrida = np.max(np.where(escopo[None], corridas, 0), axis=2, initial=0)
+    max_fracao = np.max(np.where(escopo[None], fracoes, -1), axis=2, initial=-1)
+    fracoes_and = {}
+    contagens = np.zeros((len(estados), len(regras), 2), dtype=int)
+    for j, regra in enumerate(regras):
+        c, p, modo = regra["consecutivas"], regra["percentual"], regra["modo"]
+        if c is None:
+            detectou = max_fracao >= p
+        elif p is None:
+            detectou = max_corrida >= c
+        elif modo == "OR":
+            detectou = (max_corrida >= c) | (max_fracao >= p)
+        else:
+            if c not in fracoes_and:
+                fracoes_and[c] = np.max(np.where(escopo[None] & (corridas >= c), fracoes, -1),
+                                         axis=2, initial=-1)
+            detectou = fracoes_and[c] >= p
+        contagens[:, j, 0] = detectou[:, alvos].sum(axis=1)
+        contagens[:, j, 1] = detectou[:, ~alvos].sum(axis=1)
+    return contagens
 
 
-# ============================================================
-# NIVEL 2 - MATRIZ B PARA UM K_SINTETICO ESPECIFICO
-# ============================================================
-
-def construir_matriz_b(pasta_dados, k_sintetico):
-    """Recalcula B(Ausente)/B(Presente) com um K_SINTETICO especifico.
-
-    K_SINTETICO e lido, dentro de get_obs_matrix.construir_matrizes_observacao
-    (via injetar_tom_sintetico), como uma variavel do modulo get_obs_matrix.
-    Por isso sobrescrevemos o atributo do modulo antes de chamar a funcao
-    original, em vez de duplicar a logica de calibracao de B aqui.
-    """
-    valor_original = gom.K_SINTETICO
-    try:
-        gom.K_SINTETICO = k_sintetico
-        resultados = gom.construir_matrizes_observacao(pasta_dados)
-    finally:
-        gom.K_SINTETICO = valor_original
-
-    matriz_global = resultados["global"]
-    matriz_b = np.asarray(
-        [
-            [matriz_global[estado][label] for label in gom.NIVEIS_OBSERVACAO]
-            for estado in gom.ESTADOS
-        ],
-        dtype=float,
-    )
-    return matriz_b
+def escolher_parametros(protocolos, modelos, candidatos, regras):
+    p, validos, escopo, alvos = preparar_lote(protocolos)
+    emissoes = log_emissoes(p, modelos)
+    melhor = None
+    # Lotes de 32 limitam memória sem mudar o resultado matemático da busca.
+    for inicio in range(0, len(candidatos), 32):
+        lote = candidatos[inicio:inicio + 32]
+        estados = viterbi_lote(emissoes, lote)
+        contagens = contar_regras(estados, validos, escopo, alvos, regras)
+        det, fp = contagens[:, :, 0], contagens[:, :, 1]
+        n_alvos, n_laterais = int(alvos.sum()), int((~alvos).sum())
+        elegivel = fp / n_laterais <= config.FP_MAXIMO
+        ba = (det / n_alvos + 1 - fp / n_laterais) / 2
+        # Maximiza BA; empata por detecção e depois FP. Empate final: primeiro da grade.
+        indices = np.flatnonzero(elegivel)
+        if len(indices) == 0:
+            continue
+        scores = [(float(ba.flat[i]), int(det.flat[i]), -int(fp.flat[i])) for i in indices]
+        indice = int(indices[max(range(len(scores)), key=lambda i: scores[i])])
+        i, j = np.unravel_index(indice, ba.shape)
+        score = (float(ba[i, j]), int(det[i, j]), -int(fp[i, j]))
+        if melhor is None or score > tuple(melhor["score"]):
+            melhor = {**lote[i], "regra": regras[j], "score": list(score)}
+    return melhor
 
 
-# ============================================================
-# NIVEL 3 - VITERBI (por combinacao K_SINTETICO x PI_INICIAL)
-# ============================================================
-
-def _stats_binaria(binaria):
-    """Estatisticas de uma sequencia booleana, independentes de qualquer
-    limiar de decisao (MIN_CONSECUTIVE/MIN_PERCENT sao aplicados depois,
-    em cima destes numeros, sem custo de recomputo)."""
-    if len(binaria) == 0:
-        return {"n_janelas": 0, "max_consecutivas": 0, "percentual_presente": 0.0}
-    return {
-        "n_janelas": len(binaria),
-        "max_consecutivas": hmi.maior_sequencia_consecutiva_binaria(binaria),
-        "percentual_presente": sum(binaria) / len(binaria),
-    }
-
-
-def rodar_viterbi_para_combinacao(arquivos_deteccao, matriz_a, matriz_b, pi_inicial):
-    """Roda Viterbi com um (B, PI_INICIAL) fixos, reusando as labels/p_values
-    ja calculados na deteccao bruta (nivel 1) -- nenhum FFT e refeito aqui."""
-
-    def _avaliar_grupo(grupo):
-        saida = {}
-        for freq, dados in grupo.items():
-            caminho = hmi.viterbi(
-                dados["labels"], matriz_a, matriz_b, pi_inicial,
-                gom.ESTADOS, gom.NIVEIS_OBSERVACAO,
-            )
-            binaria_hmm = [estado == "Presente" for estado in caminho]
-            binaria_bruto = [
-                p <= gom.SIGNIFICANCE_LEVEL for p in dados["p_values"]
-            ]
-            saida[freq] = {
-                **_stats_binaria(binaria_hmm),
-                "deteccao_detector_bruto": _stats_binaria(binaria_bruto),
-            }
-        return saida
-
-    resultado = []
-    for arquivo in arquivos_deteccao:
-        resultado.append({
-            "por_frequencia_estimulo": _avaliar_grupo(arquivo["por_frequencia_estimulo"]),
-            "por_frequencia_lateral": _avaliar_grupo(arquivo["por_frequencia_lateral"]),
-        })
+def buscar(rapida=False):
+    cfg, grade = config.configuracao(), construir_grade(rapida)
+    dados = carregar_dados()
+    melhores = {"mle": None, "map": None}
+    avaliacoes = 0
+    for tamanho, passo in grade["janelamentos"]:
+        protocolos = preparar_protocolos(dados, tamanho, passo)
+        b = construir_matrizes_observacao(protocolos, cfg["presente_min_db"], cfg["priori"])
+        a = construir_matriz_transicao(dados, tamanho, passo)
+        candidatos = candidatos_temporais(grade, a["matriz"])
+        for metodo in melhores:
+            escolhido = escolher_parametros(protocolos, b[metodo], candidatos, grade["regras"])
+            avaliacoes += len(candidatos) * len(grade["regras"])
+            if escolhido is not None and (melhores[metodo] is None
+                    or tuple(escolhido["score"]) > tuple(melhores[metodo]["score"])):
+                eventos = avaliar(protocolos, b[metodo], escolhido["A"], escolhido["pi"], escolhido["regra"])
+                resumo = resumir(eventos)
+                if (resumo["global"]["detectados"] != escolhido["score"][1]
+                        or resumo["global"]["fp_lateral"] != -escolhido["score"][2]):
+                    raise RuntimeError("Busca em lote divergiu da inferência individual")
+                melhores[metodo] = {**escolhido, "janela": tamanho, "passo": passo,
+                                    "B": b[metodo], "metricas": resumo, "eventos": eventos}
+        print(f"Janela/passo {tamanho}/{passo} concluídos; {avaliacoes:,} avaliações", flush=True)
+    if any(m is None for m in melhores.values()):
+        raise RuntimeError("Nenhum candidato sob o teto FP; revise a grade")
+    resultado = {"configuracao": cfg, "grade": grade, "rapida": rapida, "avaliacoes": avaliacoes,
+                 "melhores": melhores, "n_pacientes": len(dados),
+                 "descricao": "B, seleção e avaliação nos mesmos pacientes (in-sample)."}
+    nome = "search_hmm_parameters_rapida.json" if rapida else "search_hmm_parameters.json"
+    salvar_json(resultado, config.RESULTS_DIR / nome)
+    for metodo, escolhido in melhores.items():
+        print(metodo.upper(), {k: escolhido[k] for k in ("janela", "passo", "A", "pi", "regra")})
+        print(escolhido["metricas"]["global"])
     return resultado
 
 
-def _montar_resultado_apenas_bruto(arquivos_deteccao):
-    """Mesmo formato de rodar_viterbi_para_combinacao, mas sem rodar Viterbi
-    -- usado so para o teto do detector bruto sozinho (nao depende de B nem
-    de PI_INICIAL)."""
-
-    def _grupo(g):
-        saida = {}
-        for freq, dados in g.items():
-            binaria_bruto = [
-                p <= gom.SIGNIFICANCE_LEVEL for p in dados["p_values"]
-            ]
-            saida[freq] = {
-                "deteccao_detector_bruto": _stats_binaria(binaria_bruto),
-            }
-        return saida
-
-    return [
-        {
-            "por_frequencia_estimulo": _grupo(arquivo["por_frequencia_estimulo"]),
-            "por_frequencia_lateral": _grupo(arquivo["por_frequencia_lateral"]),
-        }
-        for arquivo in arquivos_deteccao
-    ]
-
-
-# ============================================================
-# REGRA DE DECISAO (pos-hoc, sem recomputo -- igual ao script original)
-# ============================================================
-
-def frequencia_detectada(resultado_frequencia, min_consecutive, min_percent, modo):
-    c = resultado_frequencia["max_consecutivas"] >= min_consecutive
-    p = resultado_frequencia["percentual_presente"] >= min_percent
-    if modo == "AND":
-        return c and p
-    if modo == "OR":
-        return c or p
-    raise ValueError(f"Modo de regra de decisao invalido: {modo}")
-
-
-def frequencia_detectada_bruto(resultado_frequencia, min_consecutive, min_percent, modo):
-    bruto = resultado_frequencia["deteccao_detector_bruto"]
-    c = bruto["max_consecutivas"] >= min_consecutive
-    p = bruto["percentual_presente"] >= min_percent
-    if modo == "AND":
-        return c and p
-    if modo == "OR":
-        return c or p
-    raise ValueError(f"Modo de regra de decisao invalido: {modo}")
-
-
-def avaliar_parametros(resultados_arquivos, min_consecutive, min_percent, modo,
-                        usar_bruto=False):
-    """Deteccao, falso positivo lateral e acuracia balanceada, tratando cada
-    frequencia (de estimulo ou lateral), em qualquer arquivo, como um
-    experimento independente."""
-    funcao = frequencia_detectada_bruto if usar_bruto else frequencia_detectada
-
-    n_estimulo_total = 0
-    n_estimulo_detectadas = 0
-    n_lateral_total = 0
-    n_lateral_detectadas = 0
-
-    for resultado_arquivo in resultados_arquivos:
-        for resultado_frequencia in resultado_arquivo["por_frequencia_estimulo"].values():
-            n_estimulo_total += 1
-            n_estimulo_detectadas += funcao(
-                resultado_frequencia, min_consecutive, min_percent, modo
-            )
-        for resultado_frequencia in resultado_arquivo["por_frequencia_lateral"].values():
-            n_lateral_total += 1
-            n_lateral_detectadas += funcao(
-                resultado_frequencia, min_consecutive, min_percent, modo
-            )
-
-    taxa_deteccao = n_estimulo_detectadas / n_estimulo_total
-    taxa_falso_positivo = n_lateral_detectadas / n_lateral_total
-    especificidade = 1.0 - taxa_falso_positivo
-    acuracia_balanceada = (taxa_deteccao + especificidade) / 2.0
-
-    return {
-        "n_frequencias_estimulo": n_estimulo_total,
-        "n_frequencias_estimulo_detectadas": n_estimulo_detectadas,
-        "taxa_deteccao": taxa_deteccao,
-        "n_frequencias_laterais": n_lateral_total,
-        "n_frequencias_laterais_detectadas": n_lateral_detectadas,
-        "taxa_falso_positivo": taxa_falso_positivo,
-        "acuracia_balanceada": acuracia_balanceada,
-    }
-
-
-# ============================================================
-# BUSCA PRINCIPAL
-# ============================================================
-
-def buscar_melhores_parametros(pasta_dados=gom.DATA_DIR):
-    validar_espaco_busca()
-
-    matriz_a = hmi.carregar_matriz_transicao()
-    arquivos_deteccao = computar_deteccao_bruta(pasta_dados)
-
-    combinacoes_regra = list(product(
-        MIN_CONSECUTIVE_VALUES, MIN_PERCENT_VALUES, MODO_REGRA_DECISAO_VALUES,
-    ))
-
-    # --- Teto do detector bruto sozinho: nao depende de K_SINTETICO/PI_INICIAL,
-    # calculado uma unica vez, fora do loop principal. ---
-    resultado_apenas_bruto = _montar_resultado_apenas_bruto(arquivos_deteccao)
-    melhor_bruto_isolado = None
-    melhor_bruto_isolado_chave = None
-    for min_consecutive, min_percent, modo in combinacoes_regra:
-        metricas_bruto = avaliar_parametros(
-            resultado_apenas_bruto, min_consecutive, min_percent, modo,
-            usar_bruto=True,
-        )
-        chave_bruto = (
-            metricas_bruto["acuracia_balanceada"],
-            -metricas_bruto["taxa_falso_positivo"],
-            metricas_bruto["taxa_deteccao"],
-        )
-        if melhor_bruto_isolado_chave is None or chave_bruto > melhor_bruto_isolado_chave:
-            melhor_bruto_isolado_chave = chave_bruto
-            melhor_bruto_isolado = {
-                "min_consecutive": min_consecutive,
-                "min_percent": min_percent,
-                "modo_regra_decisao": modo,
-                **metricas_bruto,
-            }
-
-    # --- Busca principal do HMM: K_SINTETICO (recalibra B) x PI_INICIAL
-    # (Viterbi) x regra de decisao (pos-hoc), com corte automatico de FP. ---
-    melhor = None
-    melhor_chave = None
-    total_topo = len(K_SINTETICO_VALUES) * len(PI_INICIAL_VALUES)
-    combo_topo_atual = 0
-    total_avaliadas = 0
-    total_excluidas_por_fp = 0
-
-    for k_sintetico in K_SINTETICO_VALUES:
-        matriz_b = construir_matriz_b(pasta_dados, k_sintetico)
-
-        for pi_inicial in PI_INICIAL_VALUES:
-            combo_topo_atual += 1
-            print(
-                f"\rK_SINTETICO={k_sintetico:<6} PI_INICIAL={pi_inicial}  "
-                f"({combo_topo_atual}/{total_topo})",
-                end="", flush=True,
-            )
-            resultado_viterbi = rodar_viterbi_para_combinacao(
-                arquivos_deteccao, matriz_a, matriz_b, pi_inicial,
-            )
-
-            for min_consecutive, min_percent, modo in combinacoes_regra:
-                total_avaliadas += 1
-                metricas = avaliar_parametros(
-                    resultado_viterbi, min_consecutive, min_percent, modo,
-                    usar_bruto=False,
-                )
-
-                if metricas["taxa_falso_positivo"] > FP_MAXIMO_HMM:
-                    total_excluidas_por_fp += 1
-                    continue
-
-                chave = (
-                    metricas["acuracia_balanceada"],
-                    -metricas["taxa_falso_positivo"],
-                    metricas["taxa_deteccao"],
-                )
-                if melhor_chave is None or chave > melhor_chave:
-                    melhor_chave = chave
-                    melhor = {
-                        "k_sintetico": k_sintetico,
-                        "pi_inicial": pi_inicial,
-                        "min_consecutive": min_consecutive,
-                        "min_percent": min_percent,
-                        "modo_regra_decisao": modo,
-                        **metricas,
-                    }
-
-    print()
-    if melhor is None:
-        raise RuntimeError(
-            "Nenhuma combinacao ficou com taxa_falso_positivo <= "
-            f"FP_MAXIMO_HMM ({FP_MAXIMO_HMM:.2%}); aumente o limite ou "
-            "amplie o espaco de busca (K_SINTETICO_VALUES / PI_INICIAL_VALUES "
-            "/ MIN_CONSECUTIVE_VALUES / MIN_PERCENT_VALUES)."
-        )
-
-    return {
-        "melhor": melhor,
-        "melhor_bruto_isolado": melhor_bruto_isolado,
-        "total_avaliadas": total_avaliadas,
-        "total_excluidas_por_fp": total_excluidas_por_fp,
-        "total_combinacoes_regra": len(combinacoes_regra),
-    }
-
-
-# ============================================================
-# IMPRESSAO
-# ============================================================
-
-def imprimir_melhor_resultado(resumo):
-    melhor = resumo["melhor"]
-    melhor_bruto_isolado = resumo["melhor_bruto_isolado"]
-
-    print("\nMelhor combinacao (HMM)")
-    print(f"K_SINTETICO: {melhor['k_sintetico']}")
-    print(f"PI_INICIAL: {melhor['pi_inicial']}")
-    print(f"MIN_CONSECUTIVE: {melhor['min_consecutive']}")
-    print(f"MIN_PERCENT: {melhor['min_percent']:.3f}")
-    print(f"MODO_REGRA_DECISAO: {melhor['modo_regra_decisao']}")
-    print(f"Acuracia balanceada: {melhor['acuracia_balanceada']:.2%}")
-    print(
-        f"Taxa de deteccao: {melhor['taxa_deteccao']:.2%} "
-        f"({melhor['n_frequencias_estimulo_detectadas']}/"
-        f"{melhor['n_frequencias_estimulo']})"
-    )
-    print(
-        "Taxa de falso positivo lateral: "
-        f"{melhor['taxa_falso_positivo']:.2%} "
-        f"({melhor['n_frequencias_laterais_detectadas']}/"
-        f"{melhor['n_frequencias_laterais']})  "
-        f"[limite: {FP_MAXIMO_HMM:.2%}]"
-    )
-
-    print("\nMelhor combinacao possivel usando SO o detector bruto (teto do detector sozinho)")
-    print(f"MIN_CONSECUTIVE: {melhor_bruto_isolado['min_consecutive']}")
-    print(f"MIN_PERCENT: {melhor_bruto_isolado['min_percent']:.3f}")
-    print(f"MODO_REGRA_DECISAO: {melhor_bruto_isolado['modo_regra_decisao']}")
-    print(f"Acuracia balanceada: {melhor_bruto_isolado['acuracia_balanceada']:.2%}")
-    print(
-        f"Taxa de deteccao: {melhor_bruto_isolado['taxa_deteccao']:.2%} "
-        f"({melhor_bruto_isolado['n_frequencias_estimulo_detectadas']}/"
-        f"{melhor_bruto_isolado['n_frequencias_estimulo']})"
-    )
-    print(
-        "Taxa de falso positivo lateral: "
-        f"{melhor_bruto_isolado['taxa_falso_positivo']:.2%} "
-        f"({melhor_bruto_isolado['n_frequencias_laterais_detectadas']}/"
-        f"{melhor_bruto_isolado['n_frequencias_laterais']})"
-    )
-
-    ganho = melhor["acuracia_balanceada"] - melhor_bruto_isolado["acuracia_balanceada"]
-    print(
-        f"\nGanho do HMM sobre o teto do detector bruto sozinho: "
-        f"{ganho:+.2%} (acuracia balanceada)"
-    )
-
-    print(
-        f"\nCombinacoes avaliadas para o HMM: {resumo['total_avaliadas']} "
-        f"(regra de decisao x {resumo['total_combinacoes_regra']}); "
-        f"{resumo['total_excluidas_por_fp']} descartadas por "
-        f"FP > {FP_MAXIMO_HMM:.2%}."
-    )
-
-
-# ============================================================
-# BUSCA COM DETECTORES E COMBINACOES
-# ============================================================
-
-def computar_evidencias_multidetector(pasta_dados, combinacoes):
-    combinacoes = hmi.validar_combinacoes(combinacoes)
-    nomes = sorted({nome for combo in combinacoes for nome in combo})
-    caminhos = sorted(glob.glob(os.path.join(pasta_dados, hmi.PRESENT_PATTERN)))
-    if not caminhos:
-        raise RuntimeError(f"Nenhum arquivo encontrado com {hmi.PRESENT_PATTERN}")
-
-    saida = []
-    for caminho in caminhos:
-        participante, _, nivel_db = hmi.parse_nome_arquivo(caminho)
-        arquivo = hmi.carregar_mat_estimulo(caminho)
-
-        def grupo(frequencias):
-            resultado = {}
-            for frequencia in frequencias:
-                por_detector = {}
-                coeficientes, _ = hmi.extrair_coeficientes_epocas(
-                    arquivo["x"], gom.CHANNEL_INDEX, arquivo["fs"], frequencia
-                )
-                for nome in nomes:
-                    detector = hmi.det_registry.obter_detector(nome)
-                    valores, _ = hmi.det_registry.calcular_estatistica_janelas(
-                        coeficientes, detector, gom.WINDOW_SIZE_EPOCHS,
-                        gom.WINDOW_STEP_EPOCHS,
-                    )
-                    thresholds = detector.thresholds(
-                        gom.WINDOW_SIZE_EPOCHS, gom.P_VALUE_BOUNDARIES
-                    )
-                    labels = [
-                        hmi.discretizar(v, thresholds, gom.NIVEIS_OBSERVACAO)
-                        for v in valores
-                    ]
-                    p_values = [
-                        detector.p_value(v, gom.WINDOW_SIZE_EPOCHS)
-                        for v in valores
-                    ]
-                    por_detector[nome] = {
-                        "labels": labels,
-                        "p_values": p_values,
-                        "p_value_gravacao_completa": detector.p_value(
-                            detector.estatistica(coeficientes),
-                            len(coeficientes),
-                        ),
-                    }
-                resultado[float(frequencia)] = por_detector
-            return resultado
-
-        saida.append({
-            "arquivo": caminho,
-            "participante": participante,
-            "nivel_db": nivel_db,
-            "por_frequencia_estimulo": grupo(arquivo["freq_estim"]),
-            "por_frequencia_lateral": grupo(arquivo["bins_m"]),
-        })
-    return saida
-
-
-def rodar_viterbi_multidetector(evidencias, matriz_a, matrizes_b, combinacao,
-                                pi_inicial):
-    """Viterbi em lote, agrupando sequencias de mesmo comprimento."""
-    resultados = [{
-        "arquivo": arquivo["arquivo"],
-        "nivel_db": arquivo["nivel_db"],
-        "por_frequencia_estimulo": {},
-        "por_frequencia_lateral": {},
-    } for arquivo in evidencias]
-    grupos = {}
-    for indice, arquivo in enumerate(evidencias):
-        for chave_grupo in ("por_frequencia_estimulo", "por_frequencia_lateral"):
-            for freq, por_detector in arquivo[chave_grupo].items():
-                n_obs = len(por_detector[combinacao[0]]["labels"])
-                grupos.setdefault(n_obs, []).append(
-                    (indice, chave_grupo, freq, por_detector)
-                )
-
-    log_a = np.log(np.asarray(matriz_a, dtype=float) + 1e-300)
-    log_pi = np.log(np.asarray(pi_inicial, dtype=float) + 1e-300)
-    indices_labels = {label: i for i, label in enumerate(gom.NIVEIS_OBSERVACAO)}
-    for n_obs, itens in grupos.items():
-        if n_obs == 0:
-            for indice, chave_grupo, freq, _ in itens:
-                resultados[indice][chave_grupo][freq] = _stats_binaria([])
-            continue
-        n_seq = len(itens)
-        emissoes = np.zeros((n_seq, n_obs, len(gom.ESTADOS)))
-        for nome in combinacao:
-            log_b = np.log(np.asarray(matrizes_b[nome], dtype=float) + 1e-300)
-            obs = np.asarray([
-                [indices_labels[label] for label in item[3][nome]["labels"]]
-                for item in itens
-            ])
-            emissoes += np.transpose(log_b[:, obs], (1, 2, 0))
-
-        delta = log_pi + emissoes[:, 0, :]
-        psi = np.zeros((n_seq, n_obs, len(gom.ESTADOS)), dtype=np.int8)
-        for t in range(1, n_obs):
-            candidatos = delta[:, :, None] + log_a[None, :, :]
-            psi[:, t, :] = np.argmax(candidatos, axis=1)
-            delta = np.max(candidatos, axis=1) + emissoes[:, t, :]
-        estados = np.zeros((n_seq, n_obs), dtype=np.int8)
-        estados[:, -1] = np.argmax(delta, axis=1)
-        linhas = np.arange(n_seq)
-        for t in range(n_obs - 2, -1, -1):
-            estados[:, t] = psi[linhas, t + 1, estados[:, t + 1]]
-
-        for posicao, (indice, chave_grupo, freq, _) in enumerate(itens):
-            resultados[indice][chave_grupo][freq] = _stats_binaria(
-                estados[posicao] == 1
-            )
-    return resultados
-
-
-def resultado_bruto_detector(evidencias, detector_nome):
-    def grupo(dados_grupo):
-        return {
-            freq: {"deteccao_detector_bruto": _stats_binaria([
-                p <= gom.SIGNIFICANCE_LEVEL
-                for p in por_detector[detector_nome]["p_values"]
-            ])}
-            for freq, por_detector in dados_grupo.items()
-        }
-    return [{
-        "arquivo": a["arquivo"],
-        "nivel_db": a["nivel_db"],
-        "por_frequencia_estimulo": grupo(a["por_frequencia_estimulo"]),
-        "por_frequencia_lateral": grupo(a["por_frequencia_lateral"]),
-    } for a in evidencias]
-
-
-def metricas_gravacao_completa(evidencias, detector_nome, nivel_db=None):
-    estimulo = lateral = positivos_estimulo = positivos_lateral = 0
-    for arquivo in evidencias:
-        if nivel_db is not None and arquivo["nivel_db"] != nivel_db:
-            continue
-        for frequencia in arquivo["por_frequencia_estimulo"].values():
-            estimulo += 1
-            positivos_estimulo += (
-                frequencia[detector_nome]["p_value_gravacao_completa"]
-                <= gom.SIGNIFICANCE_LEVEL
-            )
-        for frequencia in arquivo["por_frequencia_lateral"].values():
-            lateral += 1
-            positivos_lateral += (
-                frequencia[detector_nome]["p_value_gravacao_completa"]
-                <= gom.SIGNIFICANCE_LEVEL
-            )
-    taxa_deteccao = positivos_estimulo / estimulo
-    taxa_fp = positivos_lateral / lateral
-    return {
-        "n_frequencias_estimulo": estimulo,
-        "n_frequencias_estimulo_detectadas": positivos_estimulo,
-        "taxa_deteccao": taxa_deteccao,
-        "n_frequencias_laterais": lateral,
-        "n_frequencias_laterais_detectadas": positivos_lateral,
-        "taxa_falso_positivo": taxa_fp,
-        "acuracia_balanceada": (taxa_deteccao + 1.0 - taxa_fp) / 2.0,
-    }
-
-
-def metricas_por_nivel(resultados, consecutivas, percentual, modo,
-                       usar_bruto=False):
-    niveis = sorted({r["nivel_db"] for r in resultados})
-    return {
-        str(nivel): avaliar_parametros(
-            [r for r in resultados if r["nivel_db"] == nivel],
-            consecutivas, percentual, modo, usar_bruto=usar_bruto,
-        )
-        for nivel in niveis
-    }
-
-
-def configuracao_busca(combinacoes):
-    return {
-        "combinacoes_detectores": [list(c) for c in combinacoes],
-        "k_sintetico": list(K_SINTETICO_VALUES),
-        "pi_inicial": [list(pi) for pi in PI_INICIAL_VALUES],
-        "p_self_ausente": list(P_SELF_AUSENTE_VALUES),
-        "p_self_presente": list(P_SELF_PRESENTE_VALUES),
-        "min_consecutive": list(MIN_CONSECUTIVE_VALUES),
-        "min_percent": list(MIN_PERCENT_VALUES),
-        "modo_regra_decisao": list(MODO_REGRA_DECISAO_VALUES),
-        "fp_maximo_hmm": FP_MAXIMO_HMM,
-        "window_size_epochs": gom.WINDOW_SIZE_EPOCHS,
-        "window_step_epochs": gom.WINDOW_STEP_EPOCHS,
-        "alpha_detector_bruto": gom.SIGNIFICANCE_LEVEL,
-    }
-
-
-def salvar_json_atomico(dados, caminho):
-    pasta = os.path.dirname(caminho) or "."
-    os.makedirs(pasta, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=pasta,
-        delete=False, suffix=".tmp",
-    ) as arquivo:
-        json.dump(
-            dados, arquivo, ensure_ascii=False, indent=2,
-            default=lambda valor: (
-                valor.item() if isinstance(valor, np.generic)
-                else valor.tolist() if isinstance(valor, np.ndarray)
-                else str(valor)
-            ),
-        )
-        arquivo.write("\n")
-        temporario = arquivo.name
-    os.replace(temporario, caminho)
-
-
-def melhor_regra_vetorizada(resultados, regras):
-    """Avalia a grade temporal sem revarrer os dicionarios a cada regra."""
-    estimulo = [d for arquivo in resultados
-                for d in arquivo["por_frequencia_estimulo"].values()]
-    lateral = [d for arquivo in resultados
-               for d in arquivo["por_frequencia_lateral"].values()]
-    consecutivas_estimulo = np.asarray([d["max_consecutivas"] for d in estimulo])
-    percentuais_estimulo = np.asarray([d["percentual_presente"] for d in estimulo])
-    consecutivas_lateral = np.asarray([d["max_consecutivas"] for d in lateral])
-    percentuais_lateral = np.asarray([d["percentual_presente"] for d in lateral])
-
-    melhor = None
-    melhor_chave = None
-    excluidas = 0
-    for consecutivas, percentual, modo in regras:
-        criterio_estimulo_a = consecutivas_estimulo >= consecutivas
-        criterio_estimulo_b = percentuais_estimulo >= percentual
-        criterio_lateral_a = consecutivas_lateral >= consecutivas
-        criterio_lateral_b = percentuais_lateral >= percentual
-        if modo == "OR":
-            detectadas_estimulo = np.logical_or(
-                criterio_estimulo_a, criterio_estimulo_b
-            )
-            detectadas_lateral = np.logical_or(
-                criterio_lateral_a, criterio_lateral_b
-            )
-        else:
-            detectadas_estimulo = np.logical_and(
-                criterio_estimulo_a, criterio_estimulo_b
-            )
-            detectadas_lateral = np.logical_and(
-                criterio_lateral_a, criterio_lateral_b
-            )
-        n_estimulo = int(np.count_nonzero(detectadas_estimulo))
-        n_lateral = int(np.count_nonzero(detectadas_lateral))
-        taxa_deteccao = n_estimulo / len(estimulo)
-        taxa_fp = n_lateral / len(lateral)
-        if taxa_fp > FP_MAXIMO_HMM:
-            excluidas += 1
-            continue
-        metricas = {
-            "n_frequencias_estimulo": len(estimulo),
-            "n_frequencias_estimulo_detectadas": n_estimulo,
-            "taxa_deteccao": taxa_deteccao,
-            "n_frequencias_laterais": len(lateral),
-            "n_frequencias_laterais_detectadas": n_lateral,
-            "taxa_falso_positivo": taxa_fp,
-            "acuracia_balanceada": (taxa_deteccao + 1.0 - taxa_fp) / 2.0,
-        }
-        chave = (metricas["acuracia_balanceada"], -taxa_fp, taxa_deteccao)
-        if melhor_chave is None or chave > melhor_chave:
-            melhor_chave = chave
-            melhor = {
-                "min_consecutive": consecutivas,
-                "min_percent": percentual,
-                "modo_regra_decisao": modo,
-                **metricas,
-            }
-    return melhor_chave, melhor, excluidas
-
-
-def buscar_melhores_parametros_multidetector(pasta_dados=gom.DATA_DIR,
-                                             combinacoes=DETECTOR_COMBINATIONS,
-                                             retomar=False,
-                                             caminho_saida=SEARCH_OUTPUT_FILE):
-    validar_espaco_busca()
-    combinacoes = hmi.validar_combinacoes(combinacoes)
-    nomes = sorted({nome for combo in combinacoes for nome in combo})
-    config = configuracao_busca(combinacoes)
-    if retomar and os.path.exists(caminho_saida):
-        with open(caminho_saida, "r", encoding="utf-8") as arquivo:
-            salvo = json.load(arquivo)
-        if salvo.get("configuracao_busca") != config:
-            raise ValueError(
-                f"{caminho_saida}: configuracao difere da busca interrompida; "
-                "use uma nova execucao sem --resume"
-            )
-        if salvo.get("status") == "complete":
-            return salvo
-    matriz_a_heuristica = hmi.carregar_matriz_transicao()
-    matrizes_a = construir_candidatas_matriz_a(matriz_a_heuristica)
-    evidencias = computar_evidencias_multidetector(pasta_dados, combinacoes)
-    regras = list(product(
-        MIN_CONSECUTIVE_VALUES, MIN_PERCENT_VALUES, MODO_REGRA_DECISAO_VALUES,
-    ))
-
-    melhores_brutos = {}
-    for nome in nomes:
-        resultados = resultado_bruto_detector(evidencias, nome)
-        candidatos = []
-        for consecutivas, percentual, modo in regras:
-            metricas = avaliar_parametros(
-                resultados, consecutivas, percentual, modo, usar_bruto=True
-            )
-            candidatos.append((
-                (metricas["acuracia_balanceada"],
-                 -metricas["taxa_falso_positivo"], metricas["taxa_deteccao"]),
-                {"detector": nome, "min_consecutive": consecutivas,
-                 "min_percent": percentual, "modo_regra_decisao": modo,
-                 **metricas},
-            ))
-        melhores_brutos[nome] = max(candidatos, key=lambda item: item[0])[1]
-        melhores_brutos[nome]["por_nivel_db"] = metricas_por_nivel(
-            resultados, melhores_brutos[nome]["min_consecutive"],
-            melhores_brutos[nome]["min_percent"],
-            melhores_brutos[nome]["modo_regra_decisao"], usar_bruto=True,
-        )
-
-    detector_gravacao_completa = {
-        nome: {
-            "global": metricas_gravacao_completa(evidencias, nome),
-            "por_nivel_db": {
-                str(nivel): metricas_gravacao_completa(evidencias, nome, nivel)
-                for nivel in sorted({a["nivel_db"] for a in evidencias})
-            },
-        }
-        for nome in nomes
-    }
-
-    melhores_hmm = {}
-    total_avaliadas = 0
-    total_excluidas = 0
-    if retomar and os.path.exists(caminho_saida):
-        with open(caminho_saida, "r", encoding="utf-8") as arquivo:
-            salvo = json.load(arquivo)
-        melhores_hmm = salvo.get("melhor_hmm_por_combinacao", {})
-        total_avaliadas = salvo.get("total_avaliadas", 0)
-        total_excluidas = salvo.get("total_excluidas_por_fp", 0)
-    salvar_json_atomico({
-        "nome": "busca_parametros_hmm",
-        "status": "running",
-        "configuracao_busca": config,
-        "melhor_hmm_por_combinacao": melhores_hmm,
-        "melhor_bruto_por_detector": melhores_brutos,
-        "detector_gravacao_completa_por_teste": detector_gravacao_completa,
-        "total_avaliadas": total_avaliadas,
-        "total_excluidas_por_fp": total_excluidas,
-        "total_matrizes_a": len(matrizes_a),
-        "combinacoes_concluidas": list(melhores_hmm),
-    }, caminho_saida)
-    total_topo = (len(combinacoes) * len(K_SINTETICO_VALUES)
-                  * len(PI_INICIAL_VALUES) * len(matrizes_a))
-    atual = len(melhores_hmm) * len(K_SINTETICO_VALUES) * len(PI_INICIAL_VALUES) * len(matrizes_a)
-    for combinacao in combinacoes:
-        chave_combo = hmi.nome_combinacao(combinacao)
-        if chave_combo in melhores_hmm:
-            continue
-        melhor = None
-        melhor_chave = None
-        melhor_resultado = None
-        for k_sintetico in K_SINTETICO_VALUES:
-            matrizes_b = {
-                nome: hmi.construir_matriz_b_detector(
-                    pasta_dados, nome, k_sintetico=k_sintetico
-                ) for nome in combinacao
-            }
-            for nome_a, matriz_a in matrizes_a:
-                for pi_inicial in PI_INICIAL_VALUES:
-                    atual += 1
-                    if atual == 1 or atual % 50 == 0:
-                        print(f"Busca {atual}/{total_topo}: "
-                              f"{chave_combo}, K={k_sintetico}, A={nome_a}, "
-                              f"PI={pi_inicial}", flush=True)
-                    resultado = rodar_viterbi_multidetector(
-                        evidencias, matriz_a, matrizes_b, combinacao, pi_inicial
-                    )
-                    total_avaliadas += len(regras)
-                    chave, candidato, excluidas = melhor_regra_vetorizada(
-                        resultado, regras
-                    )
-                    total_excluidas += excluidas
-                    if candidato is not None and (
-                        melhor_chave is None or chave > melhor_chave
-                    ):
-                        melhor_chave = chave
-                        melhor_resultado = resultado
-                        melhor = {
-                            "detectores": list(combinacao),
-                            "k_sintetico": k_sintetico,
-                            "matriz_a_origem": nome_a,
-                            "matriz_a": matriz_a.tolist(),
-                            "p_self_ausente": float(matriz_a[0, 0]),
-                            "p_self_presente": float(matriz_a[1, 1]),
-                            "pi_inicial": pi_inicial,
-                            **candidato,
-                        }
-        if melhor is not None:
-            melhor["por_nivel_db"] = metricas_por_nivel(
-                melhor_resultado, melhor["min_consecutive"],
-                melhor["min_percent"], melhor["modo_regra_decisao"],
-            )
-        melhores_hmm[chave_combo] = melhor
-        salvar_json_atomico({
-            "nome": "busca_parametros_hmm",
-            "status": "running",
-            "configuracao_busca": config,
-            "melhor_hmm_por_combinacao": melhores_hmm,
-            "melhor_bruto_por_detector": melhores_brutos,
-            "detector_gravacao_completa_por_teste": detector_gravacao_completa,
-            "total_avaliadas": total_avaliadas,
-            "total_excluidas_por_fp": total_excluidas,
-            "total_matrizes_a": len(matrizes_a),
-            "combinacoes_concluidas": list(melhores_hmm),
-        }, caminho_saida)
-    validos = [r for r in melhores_hmm.values() if r is not None]
-    melhor_global = max(validos, key=lambda r: (
-        r["acuracia_balanceada"], -r["taxa_falso_positivo"], r["taxa_deteccao"]
-    )) if validos else None
-    resumo = {
-        "nome": "busca_parametros_hmm",
-        "status": "complete",
-        "configuracao_busca": config,
-        "melhor_global": melhor_global,
-        "melhor_hmm_por_combinacao": melhores_hmm,
-        "melhor_bruto_por_detector": melhores_brutos,
-        "detector_gravacao_completa_por_teste": detector_gravacao_completa,
-        "total_avaliadas": total_avaliadas,
-        "total_excluidas_por_fp": total_excluidas,
-        "total_matrizes_a": len(matrizes_a),
-        "combinacoes_concluidas": list(melhores_hmm),
-    }
-    salvar_json_atomico(resumo, caminho_saida)
-    return resumo
-
-
-def imprimir_resultado_multidetector(resumo):
-    print("\nMelhores resultados HMM por detector/combinacao")
-    for nome, resultado in resumo["melhor_hmm_por_combinacao"].items():
-        if resultado is None:
-            print(f"  {nome}: nenhuma configuracao sob o limite de FP")
-            continue
-        print(f"  {nome:24s} acuracia={resultado['acuracia_balanceada']:.2%} "
-              f"deteccao={resultado['taxa_deteccao']:.2%} "
-              f"FP={resultado['taxa_falso_positivo']:.2%} "
-              f"A=({resultado['p_self_ausente']:.3f},"
-              f"{resultado['p_self_presente']:.3f})")
-        for nivel, metricas in resultado["por_nivel_db"].items():
-            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%} "
-                  f"({metricas['n_frequencias_estimulo_detectadas']}/"
-                  f"{metricas['n_frequencias_estimulo']}), "
-                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
-    print("\nMelhores resultados dos detectores brutos por teste")
-    for nome, resultado in resumo["melhor_bruto_por_detector"].items():
-        print(f"  {nome:24s} acuracia={resultado['acuracia_balanceada']:.2%} "
-              f"deteccao={resultado['taxa_deteccao']:.2%} "
-              f"FP={resultado['taxa_falso_positivo']:.2%}")
-        for nivel, metricas in resultado["por_nivel_db"].items():
-            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%}, "
-                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
-    print("\nBaseline: detector uma vez por gravacao completa (det/FP por nivel)")
-    for nome, resultado in resumo["detector_gravacao_completa_por_teste"].items():
-        print(f"  {nome}:")
-        for nivel, metricas in resultado["por_nivel_db"].items():
-            print(f"    {nivel} dB: deteccao={metricas['taxa_deteccao']:.2%} "
-                  f"FP lateral={metricas['taxa_falso_positivo']:.2%}")
-    melhor = resumo["melhor_global"]
-    if melhor is None:
-        print(
-            f"\nNenhuma combinacao respeitou o limite de FP "
-            f"({FP_MAXIMO_HMM:.2%}). A busca completa foi salva."
-        )
-        print(f"Avaliacoes: {resumo['total_avaliadas']:,}")
-        return
-    print(f"\nMelhor global: {'+'.join(melhor['detectores'])} — "
-          f"acuracia={melhor['acuracia_balanceada']:.2%}")
-    print(
-        f"Matriz A: {melhor['matriz_a']} "
-        f"(p_self Ausente={melhor['p_self_ausente']:.3f}, "
-        f"Presente={melhor['p_self_presente']:.3f}; "
-        f"origem={melhor['matriz_a_origem']})"
-    )
-    print(f"K_SINTETICO: {melhor['k_sintetico']}")
-    print(f"PI_INICIAL: {melhor['pi_inicial']}")
-    print(
-        f"Regra: MIN_CONSECUTIVE={melhor['min_consecutive']}, "
-        f"MIN_PERCENT={melhor['min_percent']:.3f}, "
-        f"MODO={melhor['modo_regra_decisao']}"
-    )
-    print(
-        f"Deteccao={melhor['taxa_deteccao']:.2%} "
-        f"({melhor['n_frequencias_estimulo_detectadas']}/"
-        f"{melhor['n_frequencias_estimulo']}), "
-        f"FP={melhor['taxa_falso_positivo']:.2%} "
-        f"({melhor['n_frequencias_laterais_detectadas']}/"
-        f"{melhor['n_frequencias_laterais']})"
-    )
-
-
 if __name__ == "__main__":
-    import sys
-    if "--continuous-map" in sys.argv:
-        sys.argv.remove("--continuous-map")
-        import search_map_beta_hmm
-        search_map_beta_hmm.main()
-        sys.exit(0)
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--resume", action="store_true",
-        help="retoma a busca interrompida em results/search_hmm_parameters.json",
-    )
-    argumentos = parser.parse_args()
-    resumo = buscar_melhores_parametros_multidetector(
-        gom.DATA_DIR, retomar=argumentos.resume
-    )
-    imprimir_resultado_multidetector(resumo)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rapida", action="store_true", help="grade pequena para verificar o funcionamento")
+    buscar(parser.parse_args().rapida)
