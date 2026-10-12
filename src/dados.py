@@ -1,4 +1,4 @@
-"""EEG → FFT → detector → observações concatenadas por paciente/frequência."""
+"""EEG → FFT → detector → observações independentes por paciente/intensidade/frequência."""
 
 import json
 import re
@@ -79,16 +79,16 @@ def carregar_dados(pasta=config.DATA_DIR):
 
 
 def preparar_protocolos(dados, tamanho, passo, detector=None):
-    """Janelas dentro dos arquivos; concatenação das observações entre fases."""
+    """Uma sequência por arquivo/frequência, com relógio local."""
     detector = config.DETECTOR_NAME if detector is None else detector
     protocolos = []
     for paciente, arquivos in sorted(dados.items()):
         n_freq = len(arquivos["ESP"]["alvos"])
-        for grupo in ("alvo", "lateral"):
-            for indice in range(n_freq):
-                fases, observacoes, deslocamento = [], [], 0
-                for nivel in config.NIVEIS:
-                    arquivo = arquivos[nivel]
+        for nivel in config.NIVEIS:
+            arquivo = arquivos[nivel]
+            for grupo in ("alvo", "lateral"):
+                for indice in range(n_freq):
+                    observacoes = []
                     coluna = indice if grupo == "alvo" else n_freq + indice
                     chave = "coeficientes_locais" if detector == "spectral_f" else "coeficientes"
                     valores, p_values, intervalos = calcular_janelas(
@@ -98,18 +98,16 @@ def preparar_protocolos(dados, tamanho, passo, detector=None):
                         observacoes.append({
                             "arquivo": arquivo["arquivo"], "nivel": nivel,
                             "canal": config.CHANNEL_INDEX, "fs": arquivo["fs"],
-                            "intervalo_epocas": [inicio, fim], "fim_s": deslocamento + fim,
+                            "intervalo_epocas": [inicio, fim], "fim_s": fim,
                             "detector": detector, "estatistica": valor, "p_value": p,
                             "ruido_hz": arquivo["ruido_hz"][coluna] if detector == "spectral_f" else [],
                         })
-                    fases.append({"nivel": nivel, "inicio_s": deslocamento,
-                                  "n_epocas": arquivo["n_epocas"]})
-                    deslocamento += arquivo["n_epocas"]
-                protocolos.append({
-                    "paciente": paciente, "detector": detector,
-                    "grupo": grupo, "frequencia_indice": indice,
-                    "frequencia": frequencia, "alvo_hz": arquivos["ESP"]["alvos"][indice],
-                    "controle_hz": arquivos["ESP"]["laterais"][indice],
-                    "fases": fases, "duracao_s": deslocamento, "observacoes": observacoes,
-                })
+                    protocolos.append({
+                        "paciente": paciente, "nivel": nivel, "arquivo": arquivo["arquivo"],
+                        "detector": detector, "grupo": grupo, "frequencia_indice": indice,
+                        "frequencia": frequencia, "alvo_hz": arquivo["alvos"][indice],
+                        "controle_hz": arquivo["laterais"][indice],
+                        "fases": [{"nivel": nivel, "inicio_s": 0, "n_epocas": arquivo["n_epocas"]}],
+                        "duracao_s": arquivo["n_epocas"], "observacoes": observacoes,
+                    })
     return protocolos

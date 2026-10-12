@@ -9,7 +9,7 @@ import config
 from dados import carregar_dados, preparar_protocolos, salvar_json
 from get_obs_matrix import construir_matrizes_observacao, log_emissoes
 from get_tran_matrix import construir_matriz_transicao
-from hmm_inference import avaliar, resumir
+from hmm_inference import avaliar, resumir, validar_regra
 from viterbi import viterbi_lote
 
 
@@ -24,6 +24,13 @@ def construir_grade(rapida=False):
               for c, p, modo in product(consecutivas, percentuais, ("OR", "AND"))]
     regras += [{"consecutivas": c, "percentual": None, "modo": "OR"} for c in consecutivas]
     regras += [{"consecutivas": None, "percentual": p, "modo": "OR"} for p in percentuais]
+    recentes = (5,) if rapida else config.ULTIMAS_JANELAS_VALUES
+    minimos = (2,) if rapida else config.MIN_DETECCOES_ULTIMAS_VALUES
+    regras += [{"consecutivas": None, "percentual": None, "modo": "OR",
+                "ultimas_janelas": n, "min_deteccoes_ultimas": k}
+               for n, k in product(recentes, minimos) if 1 <= k <= n]
+    for regra in regras:
+        validar_regra(regra)
     return {"janelamentos": [(m, passo) for m in janelas for passo in (m // 2, m)],
             "persistencias": probabilidades, "pi_ausente": pi_values, "regras": regras}
 
@@ -70,24 +77,37 @@ def contar_regras(estados, validos, escopo, alvos, regras):
     fracoes_and = {}
     contagens = np.zeros((len(estados), len(regras), 2), dtype=int)
     for j, regra in enumerate(regras):
+        validar_regra(regra)
         c, p, modo = regra["consecutivas"], regra["percentual"], regra["modo"]
-        if c is None:
-            detectou = max_fracao >= p
-        elif p is None:
-            detectou = max_corrida >= c
-        elif modo == "OR":
-            detectou = (max_corrida >= c) | (max_fracao >= p)
+        n = regra.get("ultimas_janelas")
+        if n is None:
+            if c is None:
+                detectou = max_fracao >= p
+            elif p is None:
+                detectou = max_corrida >= c
+            elif modo == "OR":
+                detectou = (max_corrida >= c) | (max_fracao >= p)
+            else:
+                if c not in fracoes_and:
+                    fracoes_and[c] = np.max(np.where(escopo[None] & (corridas >= c), fracoes, -1),
+                                             axis=2, initial=-1)
+                detectou = fracoes_and[c] >= p
         else:
-            if c not in fracoes_and:
-                fracoes_and[c] = np.max(np.where(escopo[None] & (corridas >= c), fracoes, -1),
-                                         axis=2, initial=-1)
-            detectou = fracoes_and[c] >= p
+            # Soma móvel causal: S_t - S_(t-N), sem padding ou prefixo incompleto.
+            acumulados = estados.cumsum(axis=2)
+            recentes = acumulados.copy()
+            recentes[:, :, n:] -= acumulados[:, :, :-n]
+            passou = (recentes >= regra["min_deteccoes_ultimas"]) & (np.arange(estados.shape[2]) >= n-1)
+            for criterio in ([corridas >= c] if c is not None else []) + ([fracoes >= p] if p is not None else []):
+                passou = passou & criterio if modo == "AND" else passou | criterio
+            detectou = np.any(passou & escopo[None] & validos[None], axis=2)
         contagens[:, j, 0] = detectou[:, alvos].sum(axis=1)
         contagens[:, j, 1] = detectou[:, ~alvos].sum(axis=1)
     return contagens
 
 
 def escolher_parametros(protocolos, modelos, candidatos, regras):
+    protocolos = [p for p in protocolos if p["grupo"] == "lateral" or p.get("nivel") != "ESP"]
     p, validos, escopo, alvos = preparar_lote(protocolos)
     emissoes = log_emissoes(p, modelos)
     melhor = None
@@ -119,7 +139,7 @@ def buscar(rapida=False):
     melhores = {"mle": None, "map": None}
     avaliacoes = 0
     for tamanho, passo in grade["janelamentos"]:
-        protocolos = preparar_protocolos(dados, tamanho, passo)
+        protocolos = preparar_protocolos(dados, tamanho, passo, cfg["detector"])
         b = construir_matrizes_observacao(protocolos, cfg["presente_min_db"], cfg["priori"])
         a = construir_matriz_transicao(dados, tamanho, passo)
         candidatos = candidatos_temporais(grade, a["matriz"])

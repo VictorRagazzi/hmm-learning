@@ -14,8 +14,11 @@ históricos, LOSO, histogramas de emissão ou dados sintéticos.
   MMSC é split-half experimental e F espectral precisa dos bins de ruído locais.
 - Leia `Fs`, `freqEstim` e `binsM` dos EEG reais; preserve dados e metadados.
 - Uma emissão global por estado, compartilhada entre pacientes/frequências.
-- Concatene ESP→30→40→50→60→70 somente dentro de cada paciente/frequência.
-  Calcule janelas dentro dos arquivos; mantenha delta e contadores entre fases.
+- Não concatene intensidades. Uma sequência por paciente/intensidade/frequência.
+  Calcule janelas dentro dos arquivos; reinicie delta, contadores e relógio por arquivo.
+- Reporte detecções, tempo e FP por paciente/intensidade; preserve arquivos sem janela.
+- Critério móvel opcional: K estados causais Presente nas últimas N janelas completas;
+  inclua as regras móveis configuráveis na busca.
 - Ausente: alvos ESP. Presente: alvos reais >=50 dB (corte configurável).
   Laterais medem FP e não calibram B. Priori somente em Presente.
 - B no HMM é uma densidade Beta, não a tabela ilustrativa de massas.
@@ -23,6 +26,8 @@ históricos, LOSO, histogramas de emissão ou dados sintéticos.
 - FP lateral é separado de FP dos alvos ESP, inclusive por frequência.
 - A calculada por duração e A selecionada pela busca têm interpretações
   diferentes; nenhuma é transição fisiológica validada ou Baum–Welch.
+- A comparação atual Rayleigh bruto × HMM MLE/MAP está em comparar_rayleigh.py;
+  use intensidades independentes e o mesmo objetivo/teto global de FP.
 - Todos os resultados são in-sample, sem validação clínica/independente.
 - Prefira funções curtas, nomes em português, fluxo explícito e comentários
   sobre as fórmulas; público com programação básica.

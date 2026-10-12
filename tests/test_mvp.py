@@ -11,6 +11,7 @@ from scipy.stats import beta, gamma
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import config
+from comparar_rayleigh import avaliar_bruto
 from dados import carregar_dados, preparar_protocolos
 from detectors import DETECTORES, calcular_janelas
 from get_obs_matrix import ajustar_map, construir_matrizes_observacao, log_emissoes
@@ -70,6 +71,35 @@ class MatematicaTests(unittest.TestCase):
         regra = {'consecutivas': 2, 'percentual': None, 'modo': 'OR'}
         self.assertEqual(primeiro_disparo([0, 0, 0, 1, 1], obs[:5], regra, True)['fim_s'], 4)
 
+    def test_bruto_limiar_esp_e_arquivo_sem_janelas(self):
+        regra = {'consecutivas': 1, 'percentual': None, 'modo': 'OR'}
+        base = {'paciente': 'teste', 'grupo': 'alvo', 'nivel': 30, 'arquivo': 'teste',
+                'frequencia': 81, 'alvo_hz': 81, 'controle_hz': 82, 'duracao_s': 120,
+                'observacoes': [{'p_value': .05, 'nivel': 30, 'fim_s': 60}]}
+        protocolos = [base, {**base, 'observacoes': []},
+                      {**base, 'nivel': 'ESP', 'observacoes': [
+                          {'p_value': .01, 'nivel': 'ESP', 'fim_s': 60}]}]
+        resultados = avaliar_bruto(protocolos, .05, regra)
+        self.assertTrue(resultados[0]['detectou'])
+        self.assertEqual(resultados[0]['tempo_deteccao_s'], 60)
+        self.assertFalse(resultados[1]['detectou'])
+        self.assertIsNone(resultados[1]['tempo_deteccao_s'])
+        self.assertEqual(resultados[1]['duracao_avaliada_s'], 120)
+        self.assertFalse(resultados[2]['detectou'])
+        self.assertTrue(resultados[2]['fp_esp'])
+        self.assertFalse(avaliar_bruto([base], .049, regra)[0]['detectou'])
+
+    def test_regra_movel_causal(self):
+        regra = {'consecutivas': None, 'percentual': None, 'modo': 'OR',
+                 'ultimas_janelas': 5, 'min_deteccoes_ultimas': 2}
+        obs = [{'nivel': 30, 'fim_s': t} for t in range(8)]
+        self.assertIsNone(primeiro_disparo([1, 1, 0, 0], obs[:4], regra))
+        self.assertEqual(primeiro_disparo([1, 0, 0, 0, 1], obs[:5], regra)['fim_s'], 4)
+        self.assertIsNone(primeiro_disparo([1, 0, 0, 0, 0, 1, 0, 0], obs, regra))
+        for n, k in ((0, 1), (5, 6), (None, 2), (5, None)):
+            with self.assertRaises(ValueError):
+                primeiro_disparo([], [], {**regra, 'ultimas_janelas': n, 'min_deteccoes_ultimas': k})
+
     def test_busca_lote_e_regras_contra_decisao_individual(self):
         rng = np.random.default_rng(7)
         protocolos = []
@@ -81,6 +111,9 @@ class MatematicaTests(unittest.TestCase):
         candidatos = [{'A': [[.8, .2], [.45, .55]], 'pi': [.9, .1]},
                       {'A': [[.5, .5], [.1, .9]], 'pi': [.5, .5]}]
         grade = construir_grade(True)
+        grade['regras'] += [{'consecutivas': 2, 'percentual': .6, 'modo': modo,
+                             'ultimas_janelas': 5, 'min_deteccoes_ultimas': 2}
+                            for modo in ('OR', 'AND')]
         p, validos, escopo, alvos = preparar_lote(protocolos)
         estados = viterbi_lote(log_emissoes(p, modelos), candidatos)
         contagens = contar_regras(estados, validos, escopo, alvos, grade['regras'])
@@ -109,12 +142,12 @@ class EEGRealTests(unittest.TestCase):
         cls.protocolos = preparar_protocolos(cls.dados, 90, 45, "rayleigh")
         cls.b = construir_matrizes_observacao(cls.protocolos, 50, [2, 4, 2, 1])
 
-    def test_metadados_concatenacao_e_calibracao(self):
+    def test_metadados_independencia_e_calibracao(self):
         self.assertEqual(len(self.dados), 11)
         self.assertEqual(sum(len(f) for f in self.dados.values()), 66)
-        self.assertEqual(len(self.protocolos), 176)
+        self.assertEqual(len(self.protocolos), 1056)
         for protocolo in self.protocolos:
-            self.assertEqual([f['nivel'] for f in protocolo['fases']], list(config.NIVEIS))
+            self.assertEqual([f['nivel'] for f in protocolo['fases']], [protocolo['nivel']])
             for o in protocolo['observacoes']:
                 fase = next(f for f in protocolo['fases'] if f['nivel'] == o['nivel'])
                 inicio, fim = o['intervalo_epocas']
@@ -141,40 +174,25 @@ class EEGRealTests(unittest.TestCase):
         self.assertEqual(a['resumo']['Ausente']['janelas'], 16)
         self.assertEqual(a['resumo']['Presente']['janelas'], 283)
 
-    def test_reproducao_da_versao_escolhida(self):
+    def test_inferencia_independente_e_metricas(self):
         cfg = config.configuracao()
-        for metodo in ('mle', 'map'):
-            resultado = avaliar(self.protocolos, self.b[metodo], cfg['A'], cfg['pi'], cfg['regra'])
-            metricas = resumir(resultado)
-            self.assertEqual(metricas['global']['detectados'], 66)
-            self.assertEqual(metricas['global']['fp_lateral'], 4)
-            self.assertEqual(metricas['global']['fp_alvo_esp'], 0)
-            self.assertAlmostEqual(metricas['global']['tempo_medio_detectados_s'], 784.6212121212121)
-            self.assertEqual(metricas['global']['tempo_mediano_detectados_s'], 737.5)
-            self.assertAlmostEqual(metricas['global']['acuracia_balanceada'], .8522727272727273)
-            self.assertEqual(len(metricas['por_frequencia']), 8)
-            self.assertEqual(len(metricas['por_paciente']), 11)
-
-    def test_referencia_detector_bruto(self):
-        # Baseline histórica: Rayleigh p<=.005, janela/passo 120/60,
-        # fração de positivos .025. Serve só para testar a comparação anterior.
-        protocolos = preparar_protocolos(self.dados, 120, 60, 'rayleigh')
-        regra = {'consecutivas': None, 'percentual': .025, 'modo': 'OR'}
-        tempos, fp = [], 0
-        for p in protocolos:
-            obs = p['observacoes']
-            estados = [o['p_value'] <= .005 for o in obs]
-            if p['grupo'] == 'alvo':
-                disparo = primeiro_disparo(estados, obs, regra, True)
-                if disparo is not None:
-                    tempos.append(disparo['fim_s'] - p['fases'][1]['inicio_s'])
-            else:
-                fp += primeiro_disparo(estados, obs, regra) is not None
-        self.assertEqual(len(tempos), 58)
-        self.assertEqual(fp, 3)
-        self.assertAlmostEqual((len(tempos)/88 + 1-fp/88)/2, .8125)
-        self.assertAlmostEqual(np.mean(tempos), 824.5172413793103)
-        self.assertEqual(np.median(tempos), 810.)
+        resultados = avaliar(self.protocolos, self.b['map'], cfg['A'], cfg['pi'], cfg['regra'], True)
+        resumo = resumir(resultados)
+        self.assertEqual(resumo['global']['n_alvos'], 440)
+        self.assertEqual(resumo['global']['n_laterais'], 528)
+        self.assertEqual(len(resumo['por_paciente_intensidade']), 11)
+        self.assertEqual(len(resumo['por_frequencia']), 8)
+        for p, r in zip(self.protocolos, resultados):
+            _, estados = viterbi(log_emissoes([o['p_value'] for o in p['observacoes']], self.b['map']), cfg['A'], cfg['pi'])
+            self.assertEqual(r['estados_causais'], estados.tolist())
+            if r['tempo_deteccao_s'] is not None:
+                self.assertLessEqual(r['tempo_deteccao_s'], p['duracao_s'])
+            if p['nivel'] == 70:
+                self.assertEqual(r['n_janelas'], 0)
+                self.assertIsNone(r['tempo_deteccao_s'])
+        for paciente in resumo['por_paciente_intensidade'].values():
+            self.assertEqual(paciente['70']['n_alvos'], 8)
+            self.assertEqual(paciente['ESP']['n_alvos_esp'], 8)
 
     def test_todos_detectores_b_viterbi_e_busca(self):
         cfg = config.configuracao()
@@ -188,7 +206,7 @@ class EEGRealTests(unittest.TestCase):
                 for metodo in ('mle', 'map'):
                     np.testing.assert_allclose(np.sum(b['matriz'][metodo], axis=1), 1)
                     resultado = avaliar(protocolos, b[metodo], cfg['A'], cfg['pi'], cfg['regra'])
-                    self.assertEqual(len(resultado), 176)
+                    self.assertEqual(len(resultado), 1056)
                     escolhido = escolher_parametros(protocolos, b[metodo], candidatos,
                                                      construir_grade(True)['regras'])
                     if escolhido is not None:

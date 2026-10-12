@@ -5,46 +5,46 @@
   ],
   "matriz": [
     [
-      0.5,
-      0.5
+      0.7222222222222222,
+      0.2777777777777778
     ],
     [
-      0.15547703180212014,
-      0.8445229681978799
+      0.1120162932790224,
+      0.8879837067209776
     ]
   ],
-  "janela": 90,
-  "passo": 45,
+  "janela": 60,
+  "passo": 30,
   "resumo": {
     "Ausente": {
       "arquivos": [
         {
           "arquivo": "AbESP.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "AnESP.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "BbESP.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "ErESP.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "LuESP.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "QuESP.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "SaESP.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "SoESP.mat",
@@ -52,245 +52,245 @@
         },
         {
           "arquivo": "TiESP.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "ViESP.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "WrESP.mat",
-          "janelas": 3
+          "janelas": 5
         }
       ],
-      "janelas": 16,
-      "autopassagens": 8
+      "janelas": 36,
+      "autopassagens": 26
     },
     "Presente": {
       "arquivos": [
         {
           "arquivo": "Ab30dB.mat",
-          "janelas": 10
+          "janelas": 15
         },
         {
           "arquivo": "Ab40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Ab50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Ab60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "Ab70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "An30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "An40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "An50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "An60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "An70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "Bb30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Bb40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Bb50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Bb60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "Bb70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "Er30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Er40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Er50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Er60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "Er70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "Lu30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Lu40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Lu50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Lu60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "Lu70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "Qu30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Qu40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Qu50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Qu60dB.mat",
-          "janelas": 3
+          "janelas": 5
         },
         {
           "arquivo": "Qu70dB.mat",
-          "janelas": 0
+          "janelas": 1
         },
         {
           "arquivo": "Sa30dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Sa40dB.mat",
-          "janelas": 9
+          "janelas": 15
         },
         {
           "arquivo": "Sa50dB.mat",
-          "janelas": 5
+          "janelas": 9
         },
         {
           "arquivo": "Sa60dB.mat",
-          "janelas": 1
+          "janelas": 3
         },
         {
           "arquivo": "Sa70dB.mat",
-          "janelas": 0
-        },
-        {
-          "arquivo": "So30dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "So40dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "So50dB.mat",
-          "janelas": 5
-        },
-        {
-          "arquivo": "So60dB.mat",
-          "janelas": 3
-        },
-        {
-          "arquivo": "So70dB.mat",
-          "janelas": 0
-        },
-        {
-          "arquivo": "Ti30dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Ti40dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Ti50dB.mat",
-          "janelas": 5
-        },
-        {
-          "arquivo": "Ti60dB.mat",
-          "janelas": 3
-        },
-        {
-          "arquivo": "Ti70dB.mat",
-          "janelas": 0
-        },
-        {
-          "arquivo": "Vi30dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Vi40dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Vi50dB.mat",
-          "janelas": 5
-        },
-        {
-          "arquivo": "Vi60dB.mat",
-          "janelas": 3
-        },
-        {
-          "arquivo": "Vi70dB.mat",
-          "janelas": 0
-        },
-        {
-          "arquivo": "Wr30dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Wr40dB.mat",
-          "janelas": 9
-        },
-        {
-          "arquivo": "Wr50dB.mat",
-          "janelas": 5
-        },
-        {
-          "arquivo": "Wr60dB.mat",
           "janelas": 1
         },
         {
+          "arquivo": "So30dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "So40dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "So50dB.mat",
+          "janelas": 9
+        },
+        {
+          "arquivo": "So60dB.mat",
+          "janelas": 5
+        },
+        {
+          "arquivo": "So70dB.mat",
+          "janelas": 1
+        },
+        {
+          "arquivo": "Ti30dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Ti40dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Ti50dB.mat",
+          "janelas": 9
+        },
+        {
+          "arquivo": "Ti60dB.mat",
+          "janelas": 5
+        },
+        {
+          "arquivo": "Ti70dB.mat",
+          "janelas": 1
+        },
+        {
+          "arquivo": "Vi30dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Vi40dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Vi50dB.mat",
+          "janelas": 9
+        },
+        {
+          "arquivo": "Vi60dB.mat",
+          "janelas": 5
+        },
+        {
+          "arquivo": "Vi70dB.mat",
+          "janelas": 1
+        },
+        {
+          "arquivo": "Wr30dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Wr40dB.mat",
+          "janelas": 15
+        },
+        {
+          "arquivo": "Wr50dB.mat",
+          "janelas": 9
+        },
+        {
+          "arquivo": "Wr60dB.mat",
+          "janelas": 3
+        },
+        {
           "arquivo": "Wr70dB.mat",
-          "janelas": 0
+          "janelas": 1
         }
       ],
-      "janelas": 283,
-      "autopassagens": 239
+      "janelas": 491,
+      "autopassagens": 436
     }
   },
   "metodo": "Duração: N-1 autopassagens e uma saída implícita por arquivo; heurística."

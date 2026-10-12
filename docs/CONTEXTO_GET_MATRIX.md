@@ -2,7 +2,7 @@
 
 Versão simplificada em 07/10/2026, na branch `elt610`, por solicitação do usuário.
 O escopo é calcular A/B, comparar emissão Beta por máxima verossimilhança (MLE)
-e por máxima a posteriori (MAP), aplicar Viterbi às intensidades concatenadas
+e por máxima a posteriori (MAP), aplicar Viterbi separadamente em cada intensidade
 e otimizar parâmetros. Todos os pacientes participam do ajuste e da avaliação.
 Os experimentos históricos foram removidos do diretório de trabalho.
 Por pedido posterior, os seis detectores foram recuperados em `detectors.py`,
@@ -19,7 +19,8 @@ janela/passo = 90/45 épocas
 método = MAP
 A aplicada = [[0.80,0.20],[0.45,0.55]]
 pi = [0.90,0.10]
-regra = 3 consecutivas OR 60% de positivos no prefixo
+regra = 3 consecutivas OR 60% de positivos no prefixo do arquivo
+critério móvel opcional = K estados Presente nas últimas N janelas completas
 Presente: intensidade >=50 dB
 mu ~ Beta(2,4); kappa ~ Gamma(shape=2,rate=1)
 ```
@@ -129,8 +130,8 @@ Calibração global, compartilhada entre frequências e pacientes:
 
 Pacientes com mais janelas contribuem mais. Todos os pacientes são elegíveis;
 nenhum é retido para teste. Para M=90, três ESP não têm janela, e nenhum arquivo
-70 dB tem janela. Essas fases permanecem no relógio e todos os pacientes na
-avaliação. Há 128 janelas de calibração Ausente e 672 Presente (50/60 dB).
+70 dB tem janela. Esses arquivos permanecem na avaliação, com relógio local, e todos os pacientes
+são preservados. Há 128 janelas de calibração Ausente e 672 Presente (50/60 dB).
 
 ### Máxima verossimilhança e priori
 
@@ -179,147 +180,193 @@ Gráficos: `outputs/distribuicoes_B.png` e `.pdf` (PDF/CDF por estado),
 `outputs/prioris.png` (prioris de mu/kappa para Presente). Não representam
 posteriores marginais de mu/kappa.
 
-## 5. Concatenação e Viterbi — dados.py / viterbi.py
+## 5. Sequências independentes e Viterbi — dados.py / viterbi.py
 
-Cada trajetória é paciente × frequência × grupo (alvo/lateral), na ordem
-ESP→30→40→50→60→70. Há 88 alvos e 88 controles, 176 trajetórias. Concatena-se
-somente a sequência de observações; janelas não cruzam arquivos. Pacientes e
-frequências não compartilham estado temporal. O relógio inclui fases sem janela.
+A pedido do usuário, não se concatenam mais intensidades. Cada trajetória é
+paciente × intensidade × frequência × grupo (alvo/lateral): 1.056 sequências,
+528 alvos (88 ESP e 440 estimulados) e 528 controles. Há 66 arquivos e 11 pacientes.
+As janelas permanecem dentro dos arquivos. Cada arquivo reinicia delta com pi,
+os contadores e o relógio, cujo zero é o começo da gravação daquela intensidade.
+Arquivos sem janela mantêm sua duração e metadados e não são descartados.
 
 ```text
 delta_1(j) = log(pi_j) + log B_j(p_1)
 delta_t(j) = log B_j(p_t) + max_i(delta_(t-1)(i) + log A_ij)
 ```
 
-`viterbi()` retorna o caminho completo por backtracking e os melhores estados
-terminais de cada prefixo. A primeira detecção usa apenas estados causais;
-backtracking completo incorpora futuro e não é usado para atribuir o tempo.
-Delta é pontuação de caminho, não posterior normalizada. Probabilidade zero
-em A/pi continua proibindo caminhos; empate escolhe Ausente.
+`viterbi()` retorna caminho por backtracking e estados terminais de cada prefixo.
+O tempo de detecção usa somente os estados causais. Delta é pontuação de caminho,
+não posterior normalizada. Zero em A/pi proíbe caminhos; empate escolhe Ausente.
+B continua global, com a mesma calibração e priori. A heurística não muda.
 
 ## 6. Decisão e avaliação — hmm_inference.py
 
-Consecutivas contam estados Presente seguidos. Percentual é a fração de estados
-Presente nas janelas já observadas desde ESP. `None` desativa um critério;
-pelo menos um deve ficar ativo. OR aceita qualquer critério; AND exige ambos
-no mesmo instante. Delta e contadores não reiniciam entre intensidades.
+Há três critérios opcionais, combinados por OR ou AND no mesmo instante:
 
-- Detecção: alvo que dispara após começo de 30 dB /88 alvos.
-- FP lateral: lateral com qualquer disparo, incluindo ESP /88 laterais.
-- FP alvo ESP: reportado separado /88 alvos.
-- BA = (taxa de detecção + 1 - taxa de FP lateral)/2.
-- Tempo médio/mediano de detecção: somente detectados, desde começo de 30 dB.
-  Não detectados têm tempo null e duração censurada separada.
+- `consecutivas`: estados Presente seguidos no arquivo;
+- `percentual`: fração de estados Presente no prefixo do arquivo;
+- `ultimas_janelas=N`, `min_deteccoes_ultimas=K`: pelo menos K estados Presente
+  nas N janelas mais recentes, em janela móvel causal.
 
-Há métricas globais, por paciente e por frequência, pareando alvos e controles
-conforme os metadados. Resultado escolhido MLE e MAP: 66/88 detecções (75%),
-4/88 FP lateral (4,55%), zero FP alvo ESP, BA=85,23%, média/mediana
-784,6/737,5 s desde 30 dB entre detectados. Duração média incluindo não
-detectados: 962,6 s. Nenhum ganho de decisões/tempos MAP sobre MLE nessa execução.
+`None` desativa um critério; pelo menos um precisa ficar ativo. Os dois campos
+do critério móvel precisam ser inteiros com 1 <= K <= N, ou ambos None.
+Exemplo: N=5, K=2. Esse critério só passa depois de cinco janelas completas;
+reavalia-se a cada nova janela e registra-se o primeiro disparo. Não significa
+avaliar apenas o final da gravação, nem contar p-valores brutos como detecções.
+Para usar somente essa regra em `config.py`, defina `MIN_CONSECUTIVE=None`,
+`MIN_PERCENT=None`, `ULTIMAS_JANELAS=5`, `MIN_DETECCOES_ULTIMAS=2`.
+O padrão mantém 3 consecutivas OR 60%, agora dentro de cada arquivo.
 
-São 4.784 janelas observadas no protocolo completo, incluindo alvos e laterais.
-A inferência preserva observações, intervalos, arquivo, canal, Fs, nível,
-frequência, controle, detector, estatística, bins de ruído quando aplicáveis,
-p-valor e ambos os caminhos.
+O JSON fornece as três métricas por paciente/intensidade em
+`metricas.por_paciente_intensidade`, além de resumos globais, por paciente,
+por intensidade e por frequência:
 
-FP lateral HMM por alvo pareado: 81/83/89/91 Hz =0%; 85/87/93/95 Hz =9,09%.
-O diagnóstico bruto Rayleigh nos alvos ESP, alpha=.05, é distinto:
-global 4,69%; 81:0%; 83:12,5%; 85:18,75%; 87:0%; 89:6,25%; 91/93/95:0%.
-Cada frequência tem somente 16 janelas ESP nesta configuração.
+- Detecções: número/taxa de alvos estimulados que disparam naquela gravação.
+- Tempo: média/mediana entre detectados, em segundos desde o início do arquivo.
+  Cada resultado guarda `tempo_deteccao_s`, null se não detectado, e
+  `duracao_avaliada_s`, que usa a duração da gravação nos não detectados.
+- FP: número/taxa de laterais que disparam na mesma intensidade. FP dos alvos
+  ESP tem número/taxa próprios, sem misturar os dois tipos de falso positivo.
+
+ESP não entra no denominador de detecção: seu tempo/taxa de detecção e BA são
+null. Alvos ESP entram somente em FP alvo ESP. Laterais de todas as intensidades,
+incluindo ESP, entram no FP lateral global. BA=(detecção + 1 - FP lateral)/2.
+Nenhum arquivo sem janela é descartado: os alvos estimulados continuam no
+denominador como não detectados e os laterais como sem disparo. `n_sem_janelas`
+explicita a falta de observações. Portanto, zero FP sem janelas não demonstra
+especificidade naquele arquivo. Por paciente/intensidade há oito alvos e oito
+controles pareados; em ESP, oito alvos ESP e oito controles.
+
+São 4.784 janelas no janelamento padrão 90/45, incluindo alvos e laterais.
+Observações preservam intervalos, arquivo, canal, Fs, nível, detector, estatística,
+p-valor e bins locais quando aplicáveis. Os caminhos são guardados por arquivo.
+Os antigos resultados/tempos das sequências concatenadas não são referências
+para o protocolo atual.
+
+Com a configuração padrão MAP 90/45 (3 consecutivas OR 60%), a execução
+independente teve 139/440 detecções, 10/528 FP laterais, zero FP alvo ESP,
+BA=64,85%, média/mediana 162,19/90 s entre detectados e 224 sequências sem janela.
+Por intensidade (detecções / tempo médio em segundos / FP lateral):
+
+| Nível | Detecções /88 | Tempo médio (s) | FP lateral /88 |
+|---|---:|---:|---:|
+| ESP | não aplicável | null | 0 |
+| 30 | 15 | 201,00 | 2 |
+| 40 | 38 | 222,63 | 4 |
+| 50 | 48 | 140,63 | 2 |
+| 60 | 38 | 113,68 | 2 |
+| 70 | 0 | null | 0 |
+
+70 dB não tem janelas completas para M=90 em nenhum paciente. Esses resultados
+são os de config.py, não os do vencedor da nova busca.
 
 ## 7. Busca — search_hmm_parameters.py
 
-Só existe busca global in-sample; LOSO e baselines externas foram removidos.
-Pesquisa separadamente MLE/MAP, com as mesmas prioris/corte fixos.
-O detector vem de config.py e permanece fixo durante a busca. Trocar o detector
-exige uma nova busca; --usar-busca verifica o detector do resultado salvo.
-Parâmetros pesquisados:
+A busca global continua in-sample, com todos os pacientes no ajuste e avaliação.
+Cada arquivo é uma sequência independente, tanto no lote quanto na inferência
+individual. Pesquisa MLE/MAP separadamente; detector, priori e corte vêm de config.
+Parâmetros:
 
 - janelas 10/20/30/60/90/120/180, passo metade ou janela inteira;
 - pi Ausente .99,.95,.90,.85,.80,.75,.70,.65,.60,.55,.50;
-- as mesmas probabilidades nas duas autopermanências de A;
-- A heurística do janelamento e A configurada, sem duplicatas;
+- mesmas probabilidades nas duas autopermanências de A;
+- A heurística recalculada por janelamento e A configurada, sem duplicatas;
 - consecutivas 1–12; percentuais .01,.025,.05,.075,.09,.10,.20,.30,.40,.50,
-  .60,.70,.80,.90,1; OR/AND e um limiar desativado (387 regras).
+  .60,.70,.80,.90,1; OR/AND e um limiar desativado (387 regras);
+- regras móveis isoladas: N em (3,5,10), K em (1,2,3), apenas K <= N (9 regras).
+  As grades móveis ficam em `ULTIMAS_JANELAS_VALUES` e
+  `MIN_DETECCOES_ULTIMAS_VALUES`. A busca rápida inclui N=5, K=2.
 
-Maximiza BA sob FP lateral <=5% na própria amostra. Desempata por detecção
-maior, FP menor e primeiro candidato na ordem da grade. Não minimiza tempo.
-A heurística agora acompanha cada janelamento; a versão histórica incluía
-uma A heurística fixa de 10/5 em toda a grade. A recorrência e as regras são
-as mesmas da versão escolhida.
+A inferência aceita combinar o critério móvel com os demais por OR/AND; a grade
+padrão pesquisa as regras antigas e as móveis isoladas, sem produto entre elas.
+Maximiza BA sob FP lateral global <=5%, usando 440 alvos estimulados e 528
+laterais. ESP alvo não vira detecção nem controle lateral. A busca desempata
+por maior detecção, menor FP e primeiro candidato. Não minimiza tempo.
 
-FFTs são carregadas uma vez; para cada janela, B é ajustada uma vez e a
-recorrência é calculada em lotes de 32 A/pi. Regras reutilizam estados. Padding
-não entra nas contagens. Vencedores são conferidos pelo avaliador individual.
-Não há checkpoints, LOSO, exportações HTML ou código de compatibilidade antigo.
-A saída completa é `results/search_hmm_parameters.json`; `--rapida` usa grade
-reduzida e salva `_rapida.json`, sem substituir o vencedor da busca completa.
+FFTs são carregadas uma vez, B é ajustada por janelamento e Viterbi calcula
+lotes de 32 A/pi. Padding nunca entra nos critérios, inclusive na soma móvel.
+Vencedores são verificados pelo avaliador individual e guardam as mesmas
+métricas por paciente/intensidade. Não há LOSO ou checkpoints.
 
-A busca completa simplificada terminou: 14.541.912 avaliações, janela/passo
-90/45, A=[[.8,.2],[.45,.55]], três consecutivas OR 60% para MLE e MAP.
-O desempate determinístico escolheu pi=[.99,.01], enquanto a configuração
-de referência em config.py mantém pi=[.9,.1]. As duas produzem os mesmos
-eventos e tempos nesta base: 66 alvos, quatro FP laterais, zero FP alvo ESP.
-Não houve ganho de MAP. O vencedor foi reaplicado pelo comando --usar-busca.
+Saída completa: `results/search_hmm_parameters.json`; rápida: `_rapida.json`.
+`--usar-busca` rejeita resultados salvos do protocolo concatenado, além de
+rejeitar detector incompatível. `configuracao.protocolo` identifica
+`intensidades_independentes`. Trocar detector exige recalibrar B e refazer busca.
+
+A busca completa do protocolo independente terminou com 14.880.096 avaliações.
+MLE e MAP escolheram janela/passo 60/30, A=[[.85,.15],[.20,.80]], pi=[.80,.20],
+regra 3 consecutivas OR 70%. Ambos tiveram 203/440 detecções (46,14%), 22/528
+FP laterais (4,17%), três FP alvo ESP (3,41%), BA=70,98%, tempo médio/mediano
+160,34/150 s entre detectados e 16 sequências sem janela. As nove regras móveis
+participaram da busca; nenhuma foi a vencedora global. Config.py mantém os
+parâmetros padrão anteriores para permitir comparação explícita por `--usar-busca`.
+
+O vencedor Rayleigh MAP foi aplicado novamente por `hmm_inference.py --usar-busca`,
+reproduzindo exatamente as métricas salvas na busca. Os JSONs A/B/inferência e
+figuras agora correspondem ao vencedor 60/30; os valores padrão 90/45 acima
+continuam como referência explícita de config.py. Foram exportados
+`results/rayleigh_melhor_resultado.md` e
+`results/rayleigh_melhor_por_paciente_intensidade.csv`, com as três métricas
+por paciente/intensidade. O teto de FP é global: 30 e 40 dB têm FP lateral
+individual de 7,95% e 10,23%, respectivamente.
+
+### Comparação atual com Rayleigh bruto
+
+A pedido do usuário, `src/comparar_rayleigh.py` compara os vencedores atuais
+HMM MAP/MLE com o detector bruto, no protocolo independente. Trata-se de uma
+comparação atual, não recuperação dos experimentos históricos. O bruto define
+positivo por p <= alpha, sem emissão Beta ou Viterbi, e aplica as mesmas regras
+causais de decisão temporal. A busca bruta usa os 14 janelamentos e 396 regras
+salvos pela busca HMM e `RAW_ALPHA_VALUES=(.001,.0025,.005,.01,.025,.05,.10)` em
+config.py: 38.808 candidatos. Maximiza a mesma BA sob FP lateral global <=5%,
+com os mesmos desempates e denominadores; ESP alvo permanece separado.
+
+O vencedor bruto foi 180/90 épocas, alpha=.10, uma consecutiva AND 70% do prefixo:
+176/440 detecções (40%), 25/528 FP laterais (4,73%), zero FP alvo ESP,
+BA=67,63%, média/mediana 190,74/180 s. HMM MAP/MLE reproduziram exatamente a
+busca salva: 203/440 (46,14%), 22/528 (4,17%), FP alvo ESP=3/88 (3,41%),
+BA=70,98%, média/mediana 160,34/150 s. MAP e MLE não diferem nos eventos/tempos.
+
+Os métodos usam seus melhores janelamentos próprios. O bruto tem 336 sequências
+sem janela (oito ESP, dois arquivos de 60 dB e todos os 70 dB); HMM tem 16
+sequências sem janela (um ESP). Não se descarta nenhum paciente/arquivo.
+Assim, diferenças incluem efeito do janelamento e cobertura das gravações;
+a diferença de tempo médio não é antecipação pareada nem efeito isolado do HMM.
+Alpha=.10 é um parâmetro escolhido na amostra; não significa FP de 10% por
+arquivo nem garantia externa de FP <=5% após seleção.
+
+Reprodução: `.venv/bin/python src/comparar_rayleigh.py`. Esse comando verifica
+que a busca HMM é completa, Rayleigh e independente, reaplica seus vencedores,
+confere todas as métricas e busca o bruto com os EEG atuais. Salva
+`results/comparacao_rayleigh.json`, `results/comparacao_rayleigh.md` e
+`results/comparacao_rayleigh_por_paciente_intensidade.csv`, incluindo métricas
+por paciente/intensidade e frequência, parâmetros e eventos. Não substitui
+os artefatos individuais A/B/inferência. FP aparece também em porcentagem.
 
 ## 8. Reprodução e verificações
 
 ```bash
 .venv/bin/python -m py_compile src/*.py
+.venv/bin/python -m unittest discover -s tests
 .venv/bin/python src/get_obs_matrix.py
 .venv/bin/python src/get_tran_matrix.py
 .venv/bin/python src/hmm_inference.py
 .venv/bin/python src/search_hmm_parameters.py --rapida
 .venv/bin/python src/search_hmm_parameters.py
 .venv/bin/python src/hmm_inference.py --usar-busca
-.venv/bin/python -m unittest discover -s tests
 ```
 
-Saídas A/B/inferência em `results/transition_matrix.json`,
+Saídas A/B/inferência: `results/transition_matrix.json`,
 `results/observation_matrix.json`, `results/inference_analysis.json`.
-O comando de inferência sem flag usa config.py; com `--usar-busca`, usa a
-configuração vencedora salva para o método escolhido e recalibra B global.
-Importar módulos não processa EEG, não grava arquivos e não inicia busca.
+Sem flag, a inferência usa config.py; com `--usar-busca`, aplica o vencedor e
+recalibra B. Importar módulos não processa EEG, grava arquivos ou inicia busca.
 
-Dez testes matemáticos/integrados passaram: Viterbi contra enumeração,
-causalidade e zeros, MAP contra otimização independente, influência da priori,
-regras temporais, lote versus sequência individual com padding, normalização,
-metadados reais, calibração e resultado escolhido. Todos os eventos e tempos
-das 176 trajetórias coincidiram com o artefato anterior à simplificação.
-Os testes adicionais exercitam os seis detectores nos EEG reais, ajuste MLE/MAP,
-Viterbi e seleção em lote, exclusão de alvos dos bins de ruído, equivalência
-MSC/CSM e taxas nulas simuladas. A rejeição de vencedor de outro detector
-também foi conferida. Os resultados numéricos de referência acima continuam
-sendo do Rayleigh; os demais detectores precisam de calibração/busca próprias.
-
-### Auditoria da referência anterior à simplificação
-
-Recalcularam-se os três métodos com os 66 EEG reais; seus hashes SHA-256
-coincidem com o manifesto da execução histórica. Compararam-se 176 trajetórias
-por método, incluindo detecção, FP ESP, disparo lateral, intensidade, tempo
-desde 30 dB e duração com censura. Todos esses campos coincidiram exatamente.
-MLE/MAP também tiveram eventos idênticos entre si. O resultado está em
-`results/verificacao_referencia.json`.
-
-| Método | Detectados /88 | FP lateral /88 | BA | Média / mediana desde 30 dB, detectados (s) |
-|---|---:|---:|---:|---:|
-| Bruto Rayleigh | 58 | 3 | 81,25% | 824,5 / 810 |
-| HMM MLE | 66 | 4 | 85,23% | 784,6 / 737,5 |
-| HMM MAP | 66 | 4 | 85,23% | 784,6 / 737,5 |
-
-Bruto histórico: janela/passo 120/60, alpha=.005, consecutivas desativadas,
-fração .025 no prefixo. Foi removido da busca na simplificação, mas sua
-reprodução agora fica no teste `test_referencia_detector_bruto`. Não precisa
-de emissão Beta ou Viterbi. A auditoria dos HMMs usou 90/45, A escolhida,
-regra 3 OR .60 e pi=[.9,.1], e reaplicou também os vencedores atuais com
-pi=[.99,.01]: os eventos e tempos permaneceram iguais nos dois casos.
-
-O teste de referência dos HMMs verifica também BA e mediana. Os tempos usam
-somente detectados; os conjuntos bruto/HMM diferem. A diferença de médias
-não é uma antecipação pareada de cada detecção. Zero FP alvo ESP nos três.
-Os relatórios HTML e artefatos LOSO antigos saíram da árvore do projeto na
-simplificação. O comando vigente de busca é `python src/search_hmm_parameters.py`,
-sem as flags históricas `--continuous-map --validation in-sample`.
+Os testes verificam Viterbi contra enumeração, zeros e causalidade, MAP contra
+otimização independente, priori, critérios móveis/combinados, lote versus
+individual com padding e sequências vazias, 66 EEG reais, calibração e
+normalização de A/B, independência por intensidade, relógio local, preservação
+dos arquivos sem janela e os seis detectores. A auditoria histórica não
+representa o protocolo independente e não é mais exigida como referência.
 
 ## 9. Limitações
 

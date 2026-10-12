@@ -23,7 +23,9 @@ METODO = "map"
 MATRIX_A = [[0.80, 0.20], [0.45, 0.55]]
 PI_INICIAL = [0.90, 0.10]
 MIN_CONSECUTIVE = 3
-MIN_PERCENT = 0.60  # Fração de janelas Presente desde o começo de ESP.
+MIN_PERCENT = 0.60  # Fração de janelas Presente desde o começo do arquivo.
+ULTIMAS_JANELAS = None  # Ex.: 5; None desativa o critério móvel.
+MIN_DETECCOES_ULTIMAS = None  # Ex.: 2 estados Presente nas últimas 5.
 MODO_REGRA_DECISAO = "OR"
 
 # Priori de Presente: mu ~ Beta(u,v); kappa ~ Gamma(shape,rate).
@@ -39,6 +41,9 @@ PI_ABSENT_VALUES = PERSISTENCE_VALUES
 MIN_CONSECUTIVE_VALUES = tuple(range(1, 13))
 MIN_PERCENT_VALUES = (.01, .025, .05, .075, .09, .10, .20, .30, .40, .50,
                       .60, .70, .80, .90, 1.)
+ULTIMAS_JANELAS_VALUES = (3, 5, 10)
+MIN_DETECCOES_ULTIMAS_VALUES = (1, 2, 3)
+RAW_ALPHA_VALUES = (.001, .0025, .005, .01, .025, .05, .10)
 FP_MAXIMO = 0.05
 
 
@@ -51,6 +56,8 @@ def configuracao():
                    KAPPA_PRIOR_SHAPE, KAPPA_PRIOR_RATE],
         "metodo": METODO, "A": MATRIX_A, "pi": PI_INICIAL,
         "regra": {"consecutivas": MIN_CONSECUTIVE, "percentual": MIN_PERCENT,
-                  "modo": MODO_REGRA_DECISAO},
+                  "modo": MODO_REGRA_DECISAO, "ultimas_janelas": ULTIMAS_JANELAS,
+                  "min_deteccoes_ultimas": MIN_DETECCOES_ULTIMAS},
+        "protocolo": "intensidades_independentes",
         "p_eps": P_EPS, "avaliacao": "in-sample",
     }
