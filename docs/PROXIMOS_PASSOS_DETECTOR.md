@@ -1,7 +1,7 @@
 # Próximos passos do detector (trabalho futuro)
 
 Nota de planejamento. Nenhum código foi alterado. Detector atual: Rayleigh puro
-com fasores unitários, `Z = (1/N)|Σ e^{iθ}|²` (`src/detectors.py`,
+com fasores unitários, `Z = (1/N)|Σ e^{iθ}|²` (`src/legado/detectors.py`,
 `_rayleigh_stat`), janelas de 10 épocas com passo 5, alimentando o HMM.
 
 Referências do projeto antigo, em

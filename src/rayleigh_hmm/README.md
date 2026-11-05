@@ -48,7 +48,7 @@ Saídas em `results/rayleigh_hmm/`:
 
 A pasta `results/rayleigh_hmm_baseline_canal0/` guarda uma saída anterior (canal 0 = FC, sem rejeição, com a SNR sintética sorteada antiga), apenas para comparação histórica.
 
-**Aviso:** as pastas exploratórias (`results/rayleigh_hmm/exploratorio_*` e `diagnostico_fase`, geradas por `explorar_*.py` e `diagnostico_fase.py`) foram rodadas com o sinal antigo (média de FC, Fz, Cz, F4 com rejeição 2,0) e as SNRs antigas; não foram refeitas.
+**Aviso:** as pastas exploratórias (`results/rayleigh_hmm/exploratorio_*` e `diagnostico_fase`, geradas por `explorar_*.py` e `diagnostico_fase.py`; `explorar_janela.py`, `explorar_pvalor.py` e `diagnostico_fase.py` ficam em `exploracoes/`, desatualizados) foram rodadas com o sinal antigo (média de FC, Fz, Cz, F4 com rejeição 2,0) e as SNRs antigas; não foram refeitas.
 
 ## Desenho
 
