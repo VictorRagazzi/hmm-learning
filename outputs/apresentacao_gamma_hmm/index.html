@@ -1,0 +1,697 @@
+<title>Z, Gamma e HMM na ASSR</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: caderno de laboratório. Texto curto à esquerda, palco animado à direita,
+   mapa do método sempre no topo. Azul é sempre Ausente; âmbar é sempre Presente. */
+:root{
+  --bg:#fafafa;--panel:#ffffff;--panel2:#f1f1f0;--line:#e6e6e4;
+  --fg:#171717;--mut:#5c5c5c;--aus:#2563a8;--pre:#c2620a;--ok:#16a34a;--bad:#dc2626;
+  --disp:"IBM Plex Sans","Trebuchet MS",sans-serif;
+  --body:"IBM Plex Sans",Verdana,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,monospace;
+  --ease:cubic-bezier(0.22,1,0.36,1);
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:400 16px/1.5 var(--body);font-variant-numeric:tabular-nums;overflow:hidden}
+#app{height:100%;display:grid;grid-template-rows:auto 1fr auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;align-items:center;gap:12px;padding-block:8px}
+#map{flex:1;display:flex;gap:4px;min-width:0;overflow-x:auto}
+#map span{flex:1 0 auto;text-align:center;font:400 12px var(--mono);color:var(--mut);padding:4px 8px;border-bottom:3px solid var(--line);white-space:nowrap}
+#map span.done{border-color:var(--mut)}
+#map span.on{color:var(--fg);font-weight:500;border-color:var(--fg)}
+#slide{min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(290px,35%) minmax(0,1fr);gap:28px;padding-block:8px}
+.txt{min-width:0;display:flex;flex-direction:column;gap:12px;justify-content:center;padding-block:8px}
+.txt h1{font:600 clamp(28px,3.1vw,40px)/1.1 var(--disp);letter-spacing:-0.02em;margin:0;text-wrap:balance}
+.txt p{margin:0;max-width:60ch}
+.txt ul,.txt ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.stage{min-width:0;min-height:0;display:flex;flex-direction:column;gap:12px;justify-content:center}
+.cv{flex:1;min-height:280px;width:100%;display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.a{color:var(--aus);font-weight:600}.p{color:var(--pre);font-weight:600}
+.eqm{width:fit-content;max-width:100%;font-size:clamp(17px,1.7vw,22px);background:var(--panel2);padding:8px 12px;overflow-x:auto;border-radius:8px;color:var(--fg)}
+math{font-family:"Latin Modern Math","STIX Two Math","Cambria Math",math}
+.eq{font:500 clamp(15px,1.45vw,18px)/1.4 var(--mono);background:var(--panel2);padding:8px 12px;border-radius:8px;overflow-x:auto}
+.note{font-size:14px;color:var(--mut)}
+#slide.full{grid-template-columns:minmax(0,1fr)}
+#slide.full .txt{width:100%;max-width:1240px;margin-inline:auto}
+#slide.full .txt p{max-width:none}
+.mbox{background:var(--panel2);border-radius:8px;padding:12px 16px;overflow-x:auto}
+.mbox math.dvm{}
+.dv{margin:0 auto;border-spacing:0 .5em}.dv mtd{padding:0}.dv .dl{text-align:right;padding-right:.3em}.dv .de{text-align:center}.dv .dr{text-align:left;padding-left:.3em}.dv mtr:nth-child(3) mtd{padding-bottom:1.5em}.dv .ub{font-size:.68em}
+.mbox .fn{margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line);font-size:14px;color:var(--mut)}.mbox .fn math{font-size:1.1em}
+.mbox math{font-size:clamp(17px,1.65vw,26px);margin:0;font-family:"Cambria Math","STIX Two Math","Latin Modern Math",serif}
+.leg{display:flex;flex-wrap:wrap;gap:8px 24px;font:500 14px var(--mono)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center}
+.ctl label{display:flex;gap:8px;align-items:center;font:400 14px var(--mono);flex:1;min-width:208px}
+.ctl output{min-width:64px;text-align:right;color:var(--fg);font-weight:500}
+input[type=range]{flex:1;min-width:0;accent-color:var(--fg);height:28px}
+button{font:500 16px var(--body);color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;transition:color 150ms var(--ease),background-color 150ms var(--ease),border-color 150ms var(--ease)}
+button:hover{border-color:var(--mut)}button:disabled{opacity:.4;cursor:default}
+button.on{background:var(--fg);color:var(--panel)}
+:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+footer{display:flex;align-items:center;gap:12px;padding-block:8px;justify-content:space-between}
+#count{font:400 14px var(--mono);color:var(--mut)}
+.metric{display:grid;gap:8px}
+.metric h3{margin:0;font:500 14px var(--mono);color:var(--mut)}
+.row{display:grid;grid-template-columns:128px 1fr 152px;gap:12px;align-items:center;font-size:16px}
+.track{height:24px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.track i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:left;transition:transform 500ms var(--ease)}
+.lims{margin:0;padding:0;list-style:none;counter-reset:l;overflow:auto;max-width:880px}
+.lims li{counter-increment:l;display:grid;grid-template-columns:32px 1fr;column-gap:8px;padding:12px 0;border-top:1px solid var(--line)}
+.lims li:last-child{border-bottom:1px solid var(--line)}
+.lims li::before{content:counter(l);grid-row:1/3;font:500 14px var(--mono);color:var(--mut);padding-top:2px}
+.lims h3{margin:0 0 4px;font:600 16px var(--disp)}.lims p{margin:0;font-size:16px;color:var(--mut)}
+.pipe{display:grid;gap:4px;counter-reset:s}
+.pipe button{display:grid;grid-template-columns:32px 1fr;gap:8px;text-align:left;font-weight:400;background:var(--panel);padding:4px 12px;counter-increment:s}
+.pipe button::before{content:counter(s);font:500 16px var(--mono);color:var(--pre)}
+.pad{background:var(--panel);border:1px solid var(--line);padding:16px;border-radius:12px;display:grid;gap:16px;overflow:auto}
+#glos{position:fixed;inset:0;background:var(--bg);overflow:auto;padding-block:20px;z-index:5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#glos div{max-width:760px;margin:0 auto;display:grid;gap:8px}
+#glos h2{margin:0;font:600 28px var(--disp);letter-spacing:-0.02em}
+#glos p{margin:0}
+.cover{display:grid;gap:28px;align-content:center;min-height:100%;max-width:980px;position:relative}
+.cover h1{font-size:clamp(36px,4.6vw,60px);font-weight:500;letter-spacing:-0.03em;line-height:1.08}
+.cover .cv-k{font:400 14px var(--mono);color:var(--mut);margin:0}
+.cover dl{display:grid;grid-template-columns:auto 1fr;gap:8px 24px;margin:0;font-size:20px}
+.cover dt{font:400 14px var(--mono);color:var(--mut);align-self:center}
+.cover dd{margin:0}
+.trace{display:block;width:100%;height:48px;margin-top:16px}
+.cv.short{flex:none;height:220px;min-height:0}
+.txt ul.big{gap:12px;font-size:18px;padding-left:24px}
+.foto{margin:0;display:grid;gap:4px}.foto img{width:100%;max-height:300px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block}.foto figcaption{font:400 12px var(--mono);color:var(--mut)}
+.split{display:grid;grid-template-columns:minmax(320px,460px) minmax(0,360px);gap:16px;align-items:center;justify-content:center}
+.split .cv{min-height:540px}
+.hmmbox{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;align-content:center;justify-items:center;gap:8px}
+.hmmbox svg{width:100%;max-width:340px;height:auto}
+.hmmbox .ar{fill:none;stroke:var(--mut);stroke-width:1.5}
+.hmmbox .st{font:600 13px var(--body);text-anchor:middle}
+.hmmbox .tl{font:500 14px var(--mono);fill:var(--fg);text-anchor:middle}
+.hmmbox .sl{font:400 12px var(--mono);fill:var(--mut)}
+.hmmbox .ob{font:400 13px var(--mono);fill:var(--fg);text-anchor:middle}
+.hmmbox figcaption{font:400 13px var(--mono);color:var(--mut)}
+@media(max-width:800px){.split{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:800px){
+  body{overflow:auto}#app{height:auto;min-height:100%}
+  #slide{grid-template-columns:minmax(0,1fr);overflow:visible;gap:12px}
+  .cv{height:320px;flex:none}
+  .row{grid-template-columns:92px 1fr 120px}
+  .cover h1{font-size:clamp(32px,9vw,40px)}
+  footer{position:sticky;bottom:0;background:var(--bg);padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:4px}.cards>div{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--fg);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}.cards .n{font:500 12px var(--mono);color:var(--mut)}.cards b{font:600 17px/1.25 var(--disp)}.cards p{margin:0;color:var(--mut);font-size:15px}.txt p.next{margin-top:6px;padding:10px 14px;border-left:3px solid var(--pre);background:var(--panel2);border-radius:0 8px 8px 0;max-width:none}@media (max-width:900px){.cards{grid-template-columns:1fr}}
+.tw{max-width:100%;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.tab{width:100%;border-collapse:collapse;font-size:clamp(16px,1.6vw,21px)}
+.tab th,.tab td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.tab th{font:500 14px var(--mono);color:var(--mut)}
+.tab thead tr:last-child th{border-bottom:2px solid var(--fg)}
+.tab th:first-child,.tab td:first-child{text-align:left}
+.tab .gr{text-align:center;border-bottom:1px solid var(--line)}
+.tab .vs{border-left:1px solid var(--line)}
+.tab tbody tr:last-child td{border-bottom:0}
+.tab td.g{color:var(--ok);font-weight:600;background:color-mix(in srgb,var(--ok) 11%,transparent)}
+.tab td.r{color:var(--bad);font-weight:600;background:color-mix(in srgb,var(--bad) 9%,transparent)}
+@media (max-width:600px){.tw{padding:4px}.tab{font-size:13px}.tab th{font-size:11px;white-space:normal}.tab th,.tab td{padding:6px 4px}}
+</style>
+
+<div id="app">
+  <header><div id="map"></div><button id="gb">Glossário</button></header>
+  <main id="slide" aria-live="polite"></main>
+  <footer>
+    <button id="prev">← Voltar</button><span id="count"></span><button id="anim"></button><button id="next">Avançar →</button>
+  </footer>
+</div>
+<div id="glos" hidden><div>
+<h2>Glossário</h2>
+<p><b>ASSR</b>: resposta auditiva de estado estável. O cérebro acompanha o ritmo de um som que pulsa.</p>
+<p><b>EEG</b>: eletroencefalograma, a atividade elétrica medida no couro cabeludo.</p>
+<p><b>Época</b>: um pedaço de 1 segundo do EEG. Por isso, N épocas = N segundos.</p>
+<p><b>FFT</b>: conta que mede quanto de cada frequência existe em um sinal.</p>
+<p><b>Fase</b>: em que ponto da onda o sinal começou. É o ângulo da seta.</p>
+<p><b>Rayleigh</b>: teste simples que verifica se as fases se alinham. É a referência do projeto.</p>
+<p><b>N</b>: número de épocas somadas até agora.</p>
+<p><b>Z</b>: |soma das setas|² / N. Mede o alinhamento. Não é o z-score da estatística básica.</p>
+<p><b>p-valor</b>: chance de ver um Z tão alto só por acaso, se não houver resposta.</p>
+<p><b>Limiar</b>: valor de Z acima do qual o teste declara detecção. É escolhido para que só 5% do ruído puro passe dele.</p>
+<p><b>ESP</b>: gravação sem som. Só tem ruído.</p>
+<p><b>Frequência lateral</b>: frequência sem estímulo, vizinha de um alvo. Serve para medir alarme falso.</p>
+<p><b>SNR e dB</b>: razão entre a potência da resposta e a do ruído, em escala logarítmica. −10 dB é 1/10 do ruído; −20 dB é 1/100.</p>
+<p><b>HMM</b>: modelo oculto de Markov. Supõe um estado que não vemos e deduz esse estado a partir das observações.</p>
+<p><b>A</b>: probabilidades de o estado continuar ou mudar. <b>π</b>: crença inicial. <b>B</b>: como cada estado gera observações.</p>
+<p><b>Densidade</b>: altura de uma curva de probabilidade. Pode passar de 1; a área total é que vale 1.</p>
+<p><b>Máxima verossimilhança (MLE)</b>: escolher os parâmetros que tornam os dados observados mais prováveis.</p>
+<p><b>Viterbi</b>: algoritmo que acha a sequência de estados mais provável do HMM.</p>
+<p><b>Priori</b>: crença antes dos dados. <b>Posteriori</b>: crença depois dos dados.</p>
+<p><b>Verossimilhança marginal</b>: chance dos dados depois de integrar os valores desconhecidos, aqui k e ρ.</p>
+<p><b>In-sample</b>: ajustar e avaliar nos mesmos participantes. Tende a dar números otimistas.</p>
+<p><b>Deixar um de fora</b>: ajustar com 10 participantes e testar no 11º, repetindo para cada um. Os números saem fora da amostra.</p>
+<p><b>McNemar</b>: teste que compara dois métodos aplicados aos mesmos casos.</p>
+<p><b>Protocolo concatenado</b>: as gravações de um participante, em ordem de intensidade, analisadas como uma sequência só.</p>
+<p><button id="gc">Voltar à apresentação</button></p>
+</div></div>
+
+<script>
+"use strict";
+const cs=getComputedStyle(document.documentElement);
+const K=n=>cs.getPropertyValue(n).trim();
+const COL={aus:K('--aus'),pre:K('--pre'),fg:K('--fg'),mut:K('--mut'),line:K('--line'),panel:K('--panel'),p2:K('--panel2'),ok:K('--ok'),bad:K('--bad')};
+// A animação é o conteúdo da apresentação: começa ligada mesmo com o sistema em "reduzir movimento"; o botão pausa e a escolha fica salva
+let PAUSED=false;try{PAUSED=localStorage.getItem('anim')==='off'}catch(e){}
+// Valores reais: results/rayleigh_hmm/resultados.json (emissao.presente_marginal, metodos.hmm_viterbi)
+const AUS={k:.9137,mu:.8661};
+const HMM={pi:[.7,.3],A:[[.9,.1],[.5,.5]]};
+const HIST=[305,229,151,112,96,66,41,40,28,23,17,11,7,8,4,6,2,4,3,2,1,0,3,0]; // 1160 Z do ESP, bins de 0,25
+const HYP={ak:1.4599,bk:.3181,ar:.2895,br:9.483};
+const NK=[.5144,1.188,1.821,2.479,3.199,4.023,5.014,6.294,8.173,12.07],NR=[1.135e-7,5.053e-6,2.952e-5,9.443e-5,2.252e-4,4.512e-4,8.057e-4,.001326,.002054,.003038,.004334,.006007,.008136,.01082,.01418,.01839,.02367,.03033,.03888,.05009,.06537,.08758,.1243,.2115]; // nós da integral: quantis médios das Gammas ajustadas (J = 240)
+const PTS=NK.flatMap(k=>NR.map(r=>[k,r,1]));
+const RHO=.0123;
+
+/* ---------- matemática ---------- */
+function lgam(x){const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.001208650973866179,-5395239384953e-18];
+  let y=x,t=x+5.5;t-=(x+.5)*Math.log(t);let s=1.000000000190015;for(const v of c)s+=v/++y;return -t+Math.log(2.5066282746310005*s/x)}
+const lpdf=(z,k,mu)=>{z=Math.max(z,1e-12);const th=mu/k;return (k-1)*Math.log(z)-z/th-lgam(k)-k*Math.log(th)};
+const pdf=(z,k,mu)=>Math.exp(lpdf(z,k,mu));
+const muN=(n,r)=>1+(n-1)*r;
+const pAus=z=>pdf(z,AUS.k,AUS.mu);
+const pPre=(z,n)=>{let v=0,s=0;for(const p of PTS){v+=p[2]*pdf(z,p[0],muN(n,p[1]));s+=p[2]}return v/s};
+const randn=()=>Math.sqrt(-2*Math.log(1-Math.random()))*Math.cos(2*Math.PI*Math.random());
+function rgamma(k,th){if(k<1)return rgamma(k+1,th)*Math.pow(Math.random(),1/k);
+  const d=k-1/3,c=1/Math.sqrt(9*d);for(;;){const x=randn(),v=(1+c*x)**3;if(v>0&&Math.log(1-Math.random())<.5*x*x+d-d*v+d*Math.log(v))return d*v*th}}
+const phase=(r,base=0)=>r<=0?Math.random()*2*Math.PI:base+Math.sqrt(-Math.log(r))*randn();
+const fmt=(v,d=2)=>v.toFixed(d).replace('.',',');
+
+/* ---------- desenho ---------- */
+function fit(c){const r=c.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2),W=Math.max(r.width,10),H=Math.max(r.height,10);
+  if(c.width!==Math.round(W*d)||c.height!==Math.round(H*d)){c.width=Math.round(W*d);c.height=Math.round(H*d)}
+  const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,W,H);return{x,W,H}}
+function txt(x,s,px,py,o={}){x.fillStyle=o.c||COL.mut;x.font=`${o.b?'600 ':''}${o.s||13}px ${K('--mono')}`;x.textAlign=o.a||'left';x.textBaseline=o.v||'alphabetic';x.fillText(s,px,py)}
+function plot(x,b,xr,yr,o={}){
+  const sx=v=>b.x+(v-xr[0])/(xr[1]-xr[0])*b.w, sy=v=>b.y+b.h-(v-yr[0])/(yr[1]-yr[0])*b.h;
+  x.strokeStyle=COL.line;x.lineWidth=1;x.beginPath();
+  (o.xt||[]).forEach(v=>{x.moveTo(sx(v),b.y);x.lineTo(sx(v),b.y+b.h);txt(x,String(v).replace('.',','),sx(v),b.y+b.h+15,{a:'center',s:12})});
+  (o.yt||[]).forEach(v=>{x.moveTo(b.x,sy(v));x.lineTo(b.x+b.w,sy(v));txt(x,String(v).replace('.',','),b.x-6,sy(v)+4,{a:'right',s:12})});
+  x.stroke();
+  if(o.xl)txt(x,o.xl,b.x+b.w/2,b.y+b.h+32,{a:'center'});
+  if(o.yl)txt(x,o.yl,b.x,b.y-8);
+  return{sx,sy}}
+function curve(x,b,s,f,x0,x1,col,lw=3,fill=false){x.save();x.beginPath();x.rect(b.x,b.y,b.w,b.h);x.clip();x.beginPath();
+  const n=200;for(let i=0;i<=n;i++){const v=x0+(x1-x0)*i/n,px=s.sx(v),py=s.sy(f(v));i?x.lineTo(px,py):x.moveTo(px,py)}
+  x.strokeStyle=col;x.lineWidth=lw;x.lineJoin='round';x.stroke();
+  if(fill){x.lineTo(s.sx(x1),s.sy(0));x.lineTo(s.sx(x0),s.sy(0));x.closePath();x.globalAlpha=.16;x.fillStyle=col;x.fill()}x.restore()}
+function arrow(x,a,b,c,d,col,lw=2.5,head=8){const t=Math.atan2(d-b,c-a);x.strokeStyle=x.fillStyle=col;x.lineWidth=lw;x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.stroke();
+  x.beginPath();x.moveTo(c,d);x.lineTo(c-head*Math.cos(t-.45),d-head*Math.sin(t-.45));x.lineTo(c-head*Math.cos(t+.45),d-head*Math.sin(t+.45));x.closePath();x.fill()}
+const stamp=(x,W,s='ilustrativo')=>txt(x,s,W-12,20,{a:'right',s:12,c:COL.mut});
+const sl=(id,lab,min,max,step,val)=>`<label for="${id}">${lab}<input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><output id="${id}o"></output></label>`;
+const get=id=>+document.getElementById(id).value;
+const setO=(id,s)=>{document.getElementById(id+'o').textContent=s};
+const CV=`<canvas class="cv" id="c" role="img"></canvas>`;
+
+/* ---------- quadros ---------- */
+const STAGES=['Início','Sinal','Z','HMM','Curva Gamma','Ausente','Presente','Decisão','Resultado','Extras'];
+const S=[];
+const add=(st,text,stageH,mount,alt)=>S.push({st,text,stageH,mount,alt});
+
+add(0,`<div class="cover">
+<p class="cv-k">EST 613</p>
+<h1>Utilizando Redes Ocultas de Markov na detecção de respostas automáticas em EEG</h1>
+<dl><dt>Aluno</dt><dd>Victor Ragazzi · 99872</dd><dt>Professora</dt><dd>Camila Ferreira</dd></dl>
+<svg class="trace" viewBox="0 0 1200 48" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,19.2 10,18.8 20,25.7 30,22.7 40,22.0 50,28.2 60,37.1 70,34.0 80,32.0 90,20.4 100,24.2 110,17.6 120,14.1 130,11.7 140,13.0 150,25.7 160,24.5 170,25.2 180,26.7 190,17.6 200,21.6 210,29.1 220,32.5 230,35.8 240,36.8 250,22.4 260,31.1 270,31.0 280,26.4 290,18.6 300,22.0 310,13.3 320,27.1 330,24.9 340,18.9 350,14.7 360,26.5 370,21.8 380,29.1 390,30.4 400,26.1 410,26.1 420,30.8 430,28.5 440,23.9 450,26.1 460,34.2 470,18.9 480,17.2 490,25.7 500,17.6 510,20.6 520,18.2 530,15.3 540,27.0 550,13.2 560,18.2 570,16.0 580,25.6 590,21.1 600,24.3 610,32.9 620,26.2 630,31.0 640,37.1 650,21.9 660,20.0 670,21.3 680,29.1 690,24.5 700,15.9 710,16.2 720,12.5 730,17.3 740,10.1 750,22.7 760,27.7 770,30.4 780,25.8" fill="none" stroke="var(--mut)" stroke-width="1.5" vector-effect="non-scaling-stroke"/><polyline points="780,25.8 790,25.5 800,27.6 810,21.0 820,17.3 830,25.1 840,34.7 850,30.0 860,10.6 870,12.0 880,29.2 890,35.4 900,25.0 910,12.3 920,17.2 930,26.8 940,28.4 950,25.7 960,24.1" fill="none" stroke="var(--pre)" stroke-width="1.5" vector-effect="non-scaling-stroke"/><polyline points="960,24.1 970,28.2 980,23.5 990,35.8 1000,28.1 1010,24.9 1020,28.4 1030,21.5 1040,27.7 1050,23.3 1060,33.1 1070,30.2 1080,22.3 1090,12.2 1100,14.8 1110,13.7 1120,12.7 1130,13.5 1140,25.9 1150,14.2 1160,14.3 1170,32.0 1180,27.3 1190,36.6 1200,27.3" fill="none" stroke="var(--mut)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+</div>`,'',()=>null);
+
+add(0,`<h1>Detecção auditiva automática</h1>
+<p>Medir se o som chegou ao cérebro sem depender da resposta da pessoa.</p>
+<ul class="big">
+<li><b>EEG</b>: atividade elétrica do cérebro, captada por eletrodos no couro cabeludo</li>
+<li><b>Resposta no ruído</b>: o cérebro acompanha o ritmo do som, mas com amplitude muito menor que a atividade de fundo</li>
+<li><b>Testes estatísticos</b>: decidem se há resposta ou só ruído, com taxa de alarme falso controlada</li>
+<li><b>HMM</b>: a proposta deste trabalho, que acompanha a evidência ao longo do exame</li>
+</ul>`,`<canvas class="cv short" id="c" role="img"></canvas><figure class="foto"><img src="eeg_cap.jpg" alt="Touca de EEG com eletrodos na cabeça de uma pessoa"><figcaption>Foto: Chris Hope, CC BY 2.0, via Wikimedia Commons</figcaption></figure>`,()=>{
+  const c=document.getElementById('c'),BAD=K('--bad');
+  const nz=u=>Math.sin(u*3.7+1)*.45+Math.sin(u*8.3+2)*.3+Math.sin(u*17.9)*.22+Math.sin(u*41.3+4)*.14;
+  return t=>{const{x,W,H}=fit(c),cut=W*.42,mid=H*.58,A=H*.16,sh=PAUSED?0:t*1.6;
+    const sig=i=>Math.sin(i/W*28-sh);
+    x.beginPath();for(let i=16;i<=cut;i+=2){const y=mid-sig(i)*A;i>16?x.lineTo(i,y):x.moveTo(i,y)}x.strokeStyle=COL.pre;x.lineWidth=2.5;x.stroke();
+    x.beginPath();for(let i=cut;i<=W-16;i+=2){const y=mid-(sig(i)+nz(i/W*30-sh*.7)*1.6)*A;i>cut?x.lineTo(i,y):x.moveTo(i,y)}x.strokeStyle=COL.fg;x.lineWidth=1.6;x.stroke();
+    x.strokeStyle=BAD;x.lineWidth=2;x.beginPath();x.moveTo(cut,24);x.lineTo(cut,H-12);x.stroke();
+    txt(x,'resposta do cérebro',16,28,{c:COL.pre,b:1,s:14});txt(x,'+ ruído = o que o EEG grava',cut+10,28,{c:COL.fg,b:1,s:14});stamp(x,W)}},'Senoide limpa que, após uma linha vermelha, aparece misturada a ruído');
+
+add(0,`<h1>Visão geral do trabalho</h1>
+<p>Este estudo aplica um Modelo Oculto de Markov (HMM) à detecção automática de respostas auditivas em EEG, usando <b>distribuições de probabilidade contínuas</b> como matriz de observação.</p>
+<p>A decisão passa a considerar a sequência de observações do exame, e não um único limiar fixo.</p>`,`<div class="split"><canvas class="cv flow" id="c" role="img"></canvas>
+<figure class="hmmbox"><svg viewBox="0 0 340 230" role="img" aria-label="Dois estados ocultos, Ausente e Presente, com transições entre si, cada um gerando observações Z">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--mut)"/></marker></defs>
+<text x="4" y="16" class="sl">oculto</text>
+<path d="M118 62 Q170 40 222 62" class="ar" marker-end="url(#ah)"/><path d="M222 86 Q170 108 118 86" class="ar" marker-end="url(#ah)"/>
+<text x="170" y="40" class="tl">A</text>
+<path d="M46 56 C8 36 8 112 46 92" class="ar" marker-end="url(#ah)"/><path d="M294 56 C332 36 332 112 294 92" class="ar" marker-end="url(#ah)"/>
+<circle cx="80" cy="74" r="38" fill="var(--panel)" stroke="var(--aus)" stroke-width="2"/><text x="80" y="79" class="st" fill="var(--aus)">Ausente</text>
+<circle cx="260" cy="74" r="38" fill="var(--panel)" stroke="var(--pre)" stroke-width="2"/><text x="260" y="79" class="st" fill="var(--pre)">Presente</text>
+<line x1="4" y1="140" x2="336" y2="140" stroke="var(--line)" stroke-dasharray="4 4"/>
+<path d="M80 114 L80 176" class="ar" marker-end="url(#ah)"/><path d="M260 114 L260 176" class="ar" marker-end="url(#ah)"/>
+<text x="92" y="160" class="tl">B</text><text x="272" y="160" class="tl">B</text>
+<text x="4" y="156" class="sl">observado</text>
+<rect x="44" y="182" width="72" height="34" rx="6" fill="var(--panel2)"/><text x="80" y="204" class="ob">Z baixo</text>
+<rect x="224" y="182" width="72" height="34" rx="6" fill="var(--panel2)"/><text x="260" y="204" class="ob">Z alto</text>
+</svg><figcaption>Só Z é visto; o estado é inferido.</figcaption></figure></div>`,()=>{
+  const c=document.getElementById('c');
+  // [rótulo, coluna (0 centro, 1 tradicional, 2 HMM), linha, passo da animação, destaque]
+  const N=[['Dados de EEG',0,0,0],['Pré-processamento',0,1,1],['Teste detector de resposta',0,2,2],
+    ['Comparação com limiar',1,3,3],
+    ['HMM',2,3,3,1],['Caminho ótimo (Viterbi)',2,4,4],['Decisão de resposta',0,5,5]];
+  const E=[[0,1],[1,2],[2,3],[2,4],[3,6],[4,5],[5,6]];
+  return t=>{const{x,W,H}=fit(c),a=PAUSED?9:((t*.9)%9),top=28,gap=(H-top-8)/6,bh=Math.min(gap*.6,40),cw=(W-48)/2;
+    const box=n=>{const col=n[1],w=col?cw:Math.min(W-32,cw*1.4),cx=col===0?W/2:col===1?16+cw/2:32+cw*1.5;return{cx,w,y:top+n[2]*gap+(gap-bh)/2}};
+    const yb=top+3*gap+(gap-bh)/2-(gap-bh)*.55;txt(x,'tradicional',16+cw/2-8,yb+4,{a:'right',s:12});txt(x,'proposto',32+cw*1.5+8,yb+4,{s:12,c:COL.pre});
+    E.forEach(([i,j])=>{const p=box(N[i]),q=box(N[j]),y0=p.y+bh,y1=q.y;if(p.cx===q.cx)arrow(x,p.cx,y0+3,q.cx,y1-3,COL.mut,1.5,6);
+      else{const ym=y1-(gap-bh)*.55;x.strokeStyle=COL.mut;x.lineWidth=1.5;x.beginPath();x.moveTo(p.cx,y0+3);x.lineTo(p.cx,ym);x.lineTo(q.cx,ym);x.stroke();arrow(x,q.cx,ym,q.cx,y1-3,COL.mut,1.5,6)}});
+    N.forEach(n=>{const b=box(n),on=n[3]<a;x.fillStyle=on?(n[4]?COL.pre:COL.fg):COL.p2;x.beginPath();x.roundRect?x.roundRect(b.cx-b.w/2,b.y,b.w,bh,8):x.rect(b.cx-b.w/2,b.y,b.w,bh);x.fill();
+      txt(x,n[0],b.cx,b.y+bh/2,{a:'center',v:'middle',s:Math.min(14,b.w/13),b:1,c:on?COL.panel:COL.mut})})}},'Fluxo: EEG, pré-processamento e teste detector; daí o caminho tradicional (limiar e decisão) e o proposto (HMM, Viterbi e decisão)');
+
+add(1,`<h1>Materiais</h1>
+<p>Registros de EEG de 11 voluntários com audição normal, cada um em seis condições.</p>
+<ul class="big">
+<li><b>Condições</b>: estímulo a 30, 40, 50, 60 e 70 dB (55 arquivos) e um registro <b>ESP</b>, sem estímulo, por voluntário (11 arquivos).</li>
+<li><b>Aquisição</b>: 16 canais, 1000 ou 1750 Hz, de 30 a 300 épocas por registro.</li>
+<li><b>Estimulação</b>: oito tons modulados ao mesmo tempo, em 81, 83, 85 … 95 Hz. A ASSR aparece nessas frequências.</li>
+<li><b>Falso positivo</b>: medido nas bandas laterais (82, 84 … 96 Hz), onde não há estímulo.</li>
+</ul>`,`<canvas class="cv short" id="c"></canvas>`,()=>{
+  const c=document.getElementById('c');const B=[];for(let f=81;f<=96;f++)B.push(.25+Math.random()*.2+(f%2?.5:0));
+  return t=>{const{x,W,H}=fit(c);txt(x,'Potência por frequência (sem escala)',16,20,{c:COL.fg,b:1,s:13});
+    txt(x,'estimulada',W-16,20,{a:'right',s:12,c:COL.pre});txt(x,'lateral',W-100,20,{a:'right',s:12,c:COL.mut});
+    const b0=H-26,bw=(W-32)/16;B.forEach((v,i)=>{const h=v*(H-70)*(PAUSED?1:.92+.08*Math.sin(t*2+i));x.fillStyle=i%2?COL.line:COL.pre;x.fillRect(16+i*bw+2,b0-h,bw-4,h);txt(x,String(81+i),16+(i+.5)*bw,b0+15,{a:'center',s:Math.min(12,bw/2),c:COL.mut})})}},'Barras de potência: frequências estimuladas em laranja, laterais em cinza');
+
+add(1,`<h1>Teste de Rayleigh</h1>
+<p>Detector da ASSR baseado só na <b>fase</b>. Cada época de 1 s passa pela FFT; na frequência estimulada, o coeficiente é uma seta. O teste descarta o comprimento e guarda a direção.</p>
+<p>Sem resposta, as fases ficam espalhadas e as setas se anulam. Com resposta, a fase se repete a cada época e a soma cresce.</p>
+<div class="eqm"><math display="block"><mi>Z</mi><mo>=</mo><mfrac><mn>1</mn><mi>N</mi></mfrac><mrow><mo>[</mo><msup><mrow><mo>(</mo><munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><mi>cos</mi><msub><mi>θ</mi><mi>k</mi></msub><mo>)</mo></mrow><mn>2</mn></msup><mo>+</mo><msup><mrow><mo>(</mo><munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><mi>sin</mi><msub><mi>θ</mi><mi>k</mi></msub><mo>)</mo></mrow><mn>2</mn></msup><mo>]</mo></mrow><mo>=</mo><mfrac><mn>1</mn><mi>N</mi></mfrac><msup><mrow><mo>|</mo><munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><msup><mi>e</mi><mrow><mi>i</mi><msub><mi>θ</mi><mi>k</mi></msub></mrow></msup><mo>|</mo></mrow><mn>2</mn></msup></math></div>
+<p>θₖ é a fase na época k, N o número de épocas. Sob H0, Z segue aproximadamente uma exponencial de média 1.</p>`,CV,()=>{
+  const c=document.getElementById('c');let e=0,ph=1,amp=.8,tl=0,seed=1;return (t,dt)=>{tl+=dt;if(tl>2.6){tl=0;e++;ph=Math.random()*6.28;amp=.45+Math.random()*.55;seed=Math.random()*50}
+    const{x,W,H}=fit(c),w=W<640,cx=w?W/2:W*.77,cy=w?H*.72:H/2,R=Math.min(w?H*.2:H*.3,w?W*.3:W*.17),lw=w?W-32:W*.5,ly=w?H*.24:H/2,A=Math.min(H*.15,62),show=Math.min(tl/1,1);
+    txt(x,`época ${e+1}: EEG de 1 segundo`,16,28,{b:1,c:COL.fg});stamp(x,W);
+    x.beginPath();for(let i=0;i<=lw*show;i+=1){const u=i/lw,y=ly-(Math.sin(u*17+seed)*.5+Math.sin(u*41+seed*2)*.32+Math.sin(u*73+seed)*.22)*A;i?x.lineTo(16+i,y):x.moveTo(16+i,y)}x.strokeStyle=COL.mut;x.lineWidth=1.5;x.stroke();
+    if(tl>.9){const q=Math.min((tl-.9)/.4,1);x.beginPath();for(let i=0;i<=lw;i+=1){const y=ly-Math.cos(i/lw*Math.PI*10+ph)*amp*A*.55;i?x.lineTo(16+i,y):x.moveTo(16+i,y)}x.strokeStyle=COL.fg;x.globalAlpha=q;x.lineWidth=2.4;x.stroke();x.globalAlpha=1;txt(x,'parte em uma frequência (poucos ciclos desenhados)',16,ly+A+24,{c:COL.fg,s:12})}
+    x.strokeStyle=COL.line;x.lineWidth=2;x.beginPath();x.arc(cx,cy,R,0,6.29);x.stroke();
+    const norm=Math.max(0,Math.min((tl-1.5)/.6,1)),len=amp+(1-amp)*norm;if(tl>.9)arrow(x,cx,cy,cx+Math.cos(-ph)*R*len,cy+Math.sin(-ph)*R*len,norm>=1?COL.pre:COL.fg,3.5,11);
+    txt(x,norm>=1?'só a direção':tl>.9?'amplitude e fase':'',cx,cy+R+22,{a:'center',c:COL.fg})}},'Onda ruidosa, componente em uma frequência e seta');
+
+add(2,`<h1>Somando as setas, a diferença aparece</h1>
+<p>Colocamos as setas em fila, ponta com cauda. <b>N</b> é quantas já somamos. A seta escura é a soma.</p>
+<p><span class="a">Sem resposta</span>, cada direção é aleatória, e o caminho fica vagando.</p>
+<p><span class="p">Com resposta</span>, a onda começa quase sempre no mesmo ponto em relação ao som. As setas têm uma direção preferida, e o caminho se afasta.</p>
+<p class="note">ρ mede a força dessa preferência: 0 é nenhuma, 1 é total. Aqui ρ = 0,25, um valor exagerado. Na ASSR real ele é cerca de 20 vezes menor, então a diferença demora mais a aparecer.</p>`,CV+`<div class="ctl"><button id="r">Recomeçar</button></div>`,()=>{
+  const c=document.getElementById('c');let n=0,tl=0;const mk=r=>{const a=[[0,0]];for(let i=0;i<150;i++){const p=phase(r),l=a[a.length-1];a.push([l[0]+Math.cos(p),l[1]+Math.sin(p)])}return a};
+  let A=mk(0),B=mk(.25);document.getElementById('r').onclick=()=>{A=mk(0);B=mk(.25);n=0};
+  return (t,dt)=>{tl+=dt;if(tl>.06){tl=0;n=Math.min(n+1,150)}const{x,W,H}=fit(c),narrow=W<560;
+    [[A,COL.aus,'Sem resposta'],[B,COL.pre,'Com resposta']].forEach((o,j)=>{const cw=narrow?W:W/2,ch=narrow?H/2:H,ox=narrow?W/2:W*(j*.5+.25),oy=narrow?(j+.5)*H/2:H/2,sc=Math.min(cw,ch)*.42/42;
+      const px=v=>ox+v*sc-(j?38*sc:0),py=v=>oy-v*sc;x.fillStyle=COL.mut;x.beginPath();x.arc(px(0),py(0),4,0,6.3);x.fill();
+      x.beginPath();for(let i=0;i<=n;i++){i?x.lineTo(px(o[0][i][0]),py(o[0][i][1])):x.moveTo(px(0),py(0))}x.strokeStyle=o[1];x.lineWidth=1.5;x.stroke();
+      const e=o[0][n];if(n)arrow(x,px(0),py(0),px(e[0]),py(e[1]),COL.fg,2.5,10);
+      const lx=narrow?16:W*j*.5+16,ly=narrow?(j?H/2+24:24):26;txt(x,o[2],lx,ly,{c:o[1],b:1,s:14});txt(x,`N = ${n} setas somadas`,lx,ly+19,{c:COL.fg})});stamp(x,W)}},'Dois caminhos de setas');
+
+add(2,`<h1>Z acumulado ao longo do exame</h1>
+<ul class="big">
+<li><b>Acumulado</b>: a cada 10 novas épocas, Z é recalculado com todas as épocas desde o início.</li>
+<li><b>N é tempo</b>: cada época dura 1 s, então o eixo horizontal é o tempo de exame.</li>
+<li><b>Decisão simples</b>: Z passou da linha tracejada, detectou. Quando uma curva azul passa, é um <b>alarme falso</b>.</li>
+</ul>
+<p class="note">Gráfico com ρ = 0,012, a força típica, bem menor que no quadro anterior. Este Z não é o z-score da estatística básica.</p>`,CV+`<div class="ctl"><button id="r">Novos exames</button></div>`,()=>{
+  const c=document.getElementById('c'),N=48;let T=[],m=0;
+  const gen=()=>{T=[];for(let j=0;j<12;j++){const r=j<6?0:RHO,b=Math.random()*6.28;let a=0,d=0,z=[];for(let i=1;i<=N;i++){for(let e=0;e<10;e++){const p=phase(r,b);a+=Math.cos(p);d+=Math.sin(p)}z.push((a*a+d*d)/(i*10))}T.push({z,c:j<6?COL.aus:COL.pre})}m=0};gen();document.getElementById('r').onclick=gen;
+  return (t,dt)=>{m=Math.min(m+dt*12,N);const{x,W,H}=fit(c),b={x:44,y:32,w:W-62,h:H-78},s=plot(x,b,[0,480],[0,20],{xt:[0,120,240,360,480],yt:[0,5,10,15,20],xl:'N = épocas acumuladas (segundos)',yl:'Z'});stamp(x,W,'simulação');
+    x.setLineDash([6,5]);x.strokeStyle=COL.fg;x.lineWidth=1.5;x.beginPath();x.moveTo(b.x,s.sy(3));x.lineTo(b.x+b.w,s.sy(3));x.stroke();x.setLineDash([]);txt(x,'limiar: Z ≈ 3',b.x+b.w-4,s.sy(3)-7,{a:'right',c:COL.fg});
+    x.save();x.beginPath();x.rect(b.x,b.y,b.w,b.h);x.clip();T.forEach(o=>{x.beginPath();for(let i=0;i<Math.floor(m);i++){const px=s.sx((i+1)*10),py=s.sy(o.z[i]);i?x.lineTo(px,py):x.moveTo(px,py)}x.strokeStyle=o.c;x.lineWidth=2;x.stroke()});x.restore()}},'Trajetórias de Z ao longo das épocas');
+
+add(2,`<h1>A linha de decisão vem do ruído puro</h1>
+<ul class="big">
+<li><b>Como obter o limiar</b>: simulamos ruído branco, sem resposta, aplicamos o teste e guardamos o Z de cada simulação. O limiar separa os <span class="a">95% menores</span> dos <span class="p">5% maiores</span>.</li>
+<li><b>Sem simular</b>: sob ruído, o p-valor tem forma fechada. Com 5% de falsos positivos:</li>
+</ul>
+<div class="eqm"><math display="block"><mi>p</mi><mo>=</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>Z</mi></mrow></msup><mo lspace="0.3em" rspace="0.3em">⇒</mo><msub><mi>Z</mi><mtext>lim</mtext></msub><mo>=</mo><mo>−</mo><mi>ln</mi><mo>(</mo><mn>0,05</mn><mo>)</mo><mo>≈</mo><mn>3,0</mn></math></div>
+<p class="note">Simulação com N = 100 épocas fixo; o controle muda quantas simulações entram no histograma.</p>`,CV+`<div class="ctl">${sl('n','Simulações',100,5000,100,1000)}<button id="r">Nova simulação</button></div>`,()=>{
+  const c=document.getElementById('c'),N=100;let Z=[],TOTAL=get('n');document.getElementById('r').onclick=()=>{Z=[]};
+  const sim=n=>{let a=0,d=0;for(let i=0;i<n;i++){const p=phase(0);a+=Math.cos(p);d+=Math.sin(p)}return(a*a+d*d)/n};
+  return (t,dt)=>{const tot=get('n');if(tot!==TOTAL){TOTAL=tot;if(Z.length>TOTAL)Z.length=TOTAL}setO('n',tot);const n=N;const g=PAUSED?TOTAL:Math.max(60,TOTAL/40);for(let i=0;i<g&&Z.length<TOTAL;i++)Z.push(sim(n));
+    const{x,W,H}=fit(c),b={x:44,y:28,w:W-62,h:H-74},bin=new Array(100).fill(0);Z.forEach(z=>{if(z<10)bin[Math.floor(z*10)]++});
+    const s=plot(x,b,[0,10],[0,Math.max(10,Math.max(...bin)*1.1)],{xt:[0,2,4,6,8,10],xl:'Z de cada simulação',yl:'simulações por faixa'});
+    let lim=null;if(Z.length>=20){lim=[...Z].sort((p,q)=>p-q)[Math.floor(.95*Z.length)]}
+    bin.forEach((v,i)=>{if(!v)return;x.fillStyle=lim!==null&&i/10<lim?COL.aus:lim!==null?COL.pre:COL.aus;const y=s.sy(v);x.fillRect(s.sx(i/10)+.5,y,s.sx(.1)-s.sx(0)-1,b.y+b.h-y)});
+    stamp(x,W,'simulação');txt(x,`${Z.length} simulações, N = ${n}`,W-12,38,{a:'right',c:COL.fg,s:12});txt(x,'fórmula: 3,00',W-12,54,{a:'right',s:12});
+    if(lim!==null&&lim<10){const lx=s.sx(lim);x.setLineDash([6,5]);x.strokeStyle=COL.fg;x.lineWidth=1.5;x.beginPath();x.moveTo(lx,b.y);x.lineTo(lx,b.y+b.h);x.stroke();x.setLineDash([]);
+      txt(x,`limiar medido: ${fmt(lim,2)}`,lx+8,b.y+16,{c:COL.fg,b:1});txt(x,'95% à esquerda, 5% à direita',lx+8,b.y+32,{s:12})}}},'Histograma de Z em ruído branco simulado, com o limiar que separa os 95% menores valores');
+
+add(3,`<h1>Do limiar ao HMM: falta a curva Presente</h1>
+<ul class="big">
+<li><b>Forma clássica</b>: só usa a distribuição de Z com resposta <span class="a">ausente</span>. Dela sai o limiar de 3,0.</li>
+<li><b>Limitação</b>: cada janela é julgada isoladamente; um Z alto por acaso já vira detecção.</li>
+<li><b>HMM</b>: segue a sequência de janelas, mas precisa saber o que cada estado gera. Isso é a matriz <b>B</b>.</li>
+<li><b>O que falta</b>: a distribuição de Z com resposta <span class="p">presente</span>. Os próximos quadros constroem essa curva.</li>
+</ul>`,CV,()=>{
+  const c=document.getElementById('c'),TH=-Math.log(.05);
+  return t=>{const{x,W,H}=fit(c),a=PAUSED?9:(t*.8)%9,b={x:44,y:40,w:W-62,h:H-96},s=plot(x,b,[0,10],[0,1.3],{xt:[0,2,4,6,8,10],xl:'Z observado',yl:'densidade'});
+    txt(x,'B: o que cada estado gera (exemplo com N = 100)',b.x,22,{c:COL.fg,b:1,s:13});
+    if(a>1.2){x.fillStyle=COL.bad;x.globalAlpha=.25;x.beginPath();x.moveTo(s.sx(TH),s.sy(0));for(let z=TH;z<=10;z+=.05)x.lineTo(s.sx(z),s.sy(pAus(z)));x.lineTo(s.sx(10),s.sy(0));x.fill();x.globalAlpha=1;
+      const lx=s.sx(TH);x.setLineDash([6,5]);x.strokeStyle=COL.fg;x.lineWidth=1.4;x.beginPath();x.moveTo(lx,b.y);x.lineTo(lx,b.y+b.h);x.stroke();x.setLineDash([]);
+      txt(x,'limiar 3,0',lx+8,b.y+14,{c:COL.fg,b:1,s:12});txt(x,'5% de alarmes falsos',lx+8,b.y+30,{s:12,c:COL.bad})}
+    curve(x,b,s,pAus,.03,10,COL.aus,2.6,true);txt(x,'Ausente: conhecida, vem do ruído',s.sx(1.3),s.sy(.75),{c:COL.aus,b:1,s:13});
+    if(a>3.5){const q=Math.min((a-3.5)/1,1);x.globalAlpha=q;x.setLineDash(a<5.5?[5,5]:[]);curve(x,b,s,z=>pPre(z,100),.03,10,COL.pre,2.6,a>=5.5);x.setLineDash([]);
+      txt(x,a<5.5?'Presente: ?':'Presente: precisa ser estimada',s.sx(5.6),s.sy(.32),{c:COL.pre,b:1,s:13});x.globalAlpha=1}}},'Curva Ausente com o limiar e a área de 5%; depois aparece a curva Presente, que falta estimar');
+
+add(4,`<h1>Uma família para as duas curvas: Gamma</h1>
+<ul class="big">
+<li><b>Ausente</b>: a teoria já dá a resposta. Sem resposta, Z segue uma exponencial, que é a Gamma com k = 1.</li>
+<li><b>Presente</b>: Z segue uma χ² não central, de forma parecida mas mais deslocada para a direita. Aproximamos pela mesma Gamma, só com outros parâmetros.</li>
+<li><b>Dois controles</b>: <b>μ</b>, o valor típico de Z, e <b>k</b>, a forma. k = 1 é a exponencial; k grande vira um sino.</li>
+</ul>
+<p class="note">Mexa nos controles: com k = 1 e μ = 1 a curva é a Ausente teórica. A escala usada nos livros é μ/k.</p>`,CV+`<div class="ctl">${sl('k','k',.3,8,.05,1)}${sl('m','μ',.3,6,.05,1)}</div>`,()=>{
+  const c=document.getElementById('c');return()=>{const k=get('k'),m=get('m');setO('k',fmt(k));setO('m',fmt(m));const{x,W,H}=fit(c),b={x:44,y:28,w:W-62,h:H-74},s=plot(x,b,[0,10],[0,1.2],{xt:[0,2,4,6,8,10],yt:[0,.4,.8,1.2],xl:'Z',yl:'densidade'});
+    curve(x,b,s,z=>pdf(z,k,m),.02,10,COL.fg,3.5,true);x.setLineDash([5,5]);x.strokeStyle=COL.pre;x.lineWidth=2;x.beginPath();x.moveTo(s.sx(m),b.y);x.lineTo(s.sx(m),b.y+b.h);x.stroke();x.setLineDash([]);txt(x,'μ',s.sx(m)+6,b.y+14,{c:COL.pre,b:1,s:15})}},'Curva Gamma controlada por k e μ');
+
+add(5,`<h1><span class="a">Ausente</span>: a curva vem do silêncio</h1>
+<ul class="big">
+<li><b>Dados</b>: nas gravações ESP não há som, então todo Z dali é ruído. São 1160 valores.</li>
+<li><b>Ajuste</b>: buscamos a Gamma que torna esses valores mais prováveis (máxima verossimilhança).</li>
+</ul>
+<div class="eqm"><math display="block"><mover><mi>k</mi><mo>^</mo></mover><mo>=</mo><mn>0,91</mn><mspace width="2em"/><mover><mi>μ</mi><mo>^</mo></mover><mo>=</mo><mn>0,87</mn></math></div>
+<ul class="big">
+<li><b>Teoria</b>: sem resposta, 2Z segue aproximadamente uma χ² com 2 graus de liberdade, ou seja, Z é exponencial com k = 1 e μ = 1 (tracejado; Mardia &amp; Jupp, 2000). A diferença cabe no acaso de 88 sequências.</li>
+<li><b>Curva fixa</b>: no ruído as setas não se alinham, então a curva não depende de N.</li>
+</ul>`,CV+`<div class="ctl"><button id="r">Encher de novo</button></div>`,()=>{
+  const c=document.getElementById('c'),w=.25;let f=0;document.getElementById('r').onclick=()=>{f=0};
+  return (t,dt)=>{f=Math.min(f+dt/2.5,1);const q=PAUSED?1:f;const{x,W,H}=fit(c),b={x:44,y:28,w:W-62,h:H-74},s=plot(x,b,[0,6],[0,1.2],{xt:[0,1,2,3,4,5,6],yt:[0,.4,.8,1.2],xl:'Z',yl:'densidade'});stamp(x,W,'dados reais');
+    x.fillStyle=COL.aus;x.globalAlpha=.42;HIST.forEach((v,i)=>{const d=v/(1160*w)*q,px=s.sx(i*w),pw=s.sx(w)-s.sx(0)-1;x.fillRect(px,s.sy(d),pw,s.sy(0)-s.sy(d))});x.globalAlpha=1;
+    if(q>=1)curve(x,b,s,pAus,.02,6,COL.aus,3.5);x.setLineDash([6,5]);curve(x,b,s,z=>Math.exp(-z),0,6,COL.fg,1.6);x.setLineDash([]);
+    txt(x,'barras: 1160 valores reais',b.x+b.w-4,b.y+34,{a:'right',c:COL.fg});txt(x,'tracejada: teoria',b.x+b.w-4,b.y+52,{a:'right'});if(q>=1)txt(x,'contínua: Gamma ajustada',b.x+b.w-4,b.y+70,{a:'right',c:COL.aus})}},'Histograma real de Z no ESP com curva ajustada');
+
+add(6,`<h1><span class="p">Presente</span>: a curva anda com o tempo</h1>
+<p>Com setas alinhadas, a soma cresce junto com N. Logo, Z também cresce. Uma curva fixa não serviria, então a média depende de N:</p>
+<div class="eq">μ(N) = 1 + (N − 1) · ρ</div>
+<p><b>ρ</b> (rô) é a força da resposta: o quadrado do comprimento da seta média. Vai de 0 (fase aleatória) a 1 (fase idêntica). Quanto maior ρ, mais rápido a curva anda.</p>
+<p>A <span class="a">curva azul</span> não se move. Mexa em ρ e veja a <span class="p">laranja</span>.</p>
+<p class="note">Com ρ = 0 as curvas quase coincidem. Aqui k = 1 para simplificar. Adiante, k e ρ variam de exame para exame.</p>`,CV+`<div class="ctl">${sl('r','ρ',0,.05,.001,.012)}<button id="pl">Pausar</button></div>`,()=>{
+  const c=document.getElementById('c');let u=0,run=true;const b2=document.getElementById('pl');b2.onclick=()=>{run=!run;b2.textContent=run?'Pausar':'Continuar'};const kp=1;
+  return (t,dt)=>{if(run&&!PAUSED)u+=dt*.35;const N=PAUSED?150:10+195*(1-Math.cos(u));const r=get('r');setO('r',fmt(r,3));const m=muN(N,r);const{x,W,H}=fit(c),wide=W>620;
+    const b={x:44,y:30,w:wide?W*.6:W-62,h:wide?H-76:H*.5},s=plot(x,b,[0,12],[0,1.3],{xt:[0,3,6,9,12],yt:[0,.4,.8,1.2],xl:'Z',yl:'densidade'});
+    curve(x,b,s,pAus,.03,12,COL.aus,2.5,true);curve(x,b,s,z=>pdf(z,kp,m),.03,12,COL.pre,3.5,true);txt(x,`N = ${Math.round(N)} s   média = ${fmt(m,1)}`,b.x+b.w-2,b.y+16,{a:'right',c:COL.fg,b:1,s:14});
+    const i=wide?{x:b.x+b.w+58,y:60,w:W-b.w-b.x-76,h:H-110}:{x:44,y:H*.5+86,w:W-62,h:H*.5-130};
+    const v=plot(x,i,[0,400],[0,21],{xt:[0,200,400],yt:[0,7,14,21],yl:'média μ(N)',xl:'N'});curve(x,i,v,q=>muN(q,r),0,400,COL.pre,2.5);x.fillStyle=COL.fg;x.beginPath();x.arc(v.sx(N),v.sy(m),6,0,6.3);x.fill()}},'Curva laranja anda e reta da média');
+
+add(6,`<h1>Dedução da média de Z</h1>
+<p>Cada época vira um fasor unitário <math><msub><mi>u</mi><mi>k</mi></msub><mo>=</mo><msup><mi>e</mi><mrow><mi>i</mi><msub><mi mathvariant="normal">θ</mi><mi>k</mi></msub></mrow></msup></math>: comprimento 1, ângulo igual à fase. Z é o tamanho ao quadrado da soma deles.</p>
+<div class="mbox"><math display="block"><mtable class="dv">
+<mtr><mtd class="dl"><mi>Z</mi></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mfrac><mn>1</mn><mi>N</mi></mfrac><mrow><mo stretchy="false">|</mo><munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><msup><mi>e</mi><mrow><mi>i</mi><msub><mi mathvariant="normal">θ</mi><mi>k</mi></msub></mrow></msup><msup><mo stretchy="false">|</mo><mn>2</mn></msup></mrow></mtd></mtr>
+<mtr><mtd class="dl"></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mfrac><mn>1</mn><mi>N</mi></mfrac><munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><munderover><mo>∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><msup><mi>e</mi><mrow><mi>i</mi><msub><mi mathvariant="normal">θ</mi><mi>j</mi></msub></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><mi>i</mi><msub><mi mathvariant="normal">θ</mi><mi>k</mi></msub></mrow></msup></mtd></mtr>
+<mtr><mtd class="dl"></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mfrac><mn>1</mn><mi>N</mi></mfrac><mo>[</mo><mpadded height="1.1em" depth="0.3em"><munder><munder><mrow><munder><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mi>k</mi></mrow></munder><msup><mi>e</mi><mn>0</mn></msup></mrow><mo>⏟</mo></munder><mstyle class="ub"><mtext>N termos iguais a 1</mtext></mstyle></munder></mpadded><mo>+</mo><mpadded height="1.1em" depth="0.3em"><munder><munder><mrow><munder><mo>∑</mo><mrow><mi>j</mi><mo>≠</mo><mi>k</mi></mrow></munder><mi>cos</mi><mo stretchy="false">(</mo><msub><mi mathvariant="normal">θ</mi><mi>j</mi></msub><mo>−</mo><msub><mi mathvariant="normal">θ</mi><mi>k</mi></msub><mo stretchy="false">)</mo></mrow><mo>⏟</mo></munder><mstyle class="ub"><mtext>N(N−1) pares de épocas diferentes</mtext></mstyle></munder></mpadded><mo>]</mo></mtd></mtr>
+<mtr><mtd class="dl"><mi>E</mi><mo stretchy="false">[</mo><mi>Z</mi><mo stretchy="false">]</mo></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mfrac><mn>1</mn><mi>N</mi></mfrac><mo stretchy="false">[</mo><mi>N</mi><mo>+</mo><mi>N</mi><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi mathvariant="normal">ρ</mi><mo stretchy="false">]</mo><mo>=</mo><mn>1</mn><mo>+</mo><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi mathvariant="normal">ρ</mi></mtd></mtr>
+</mtable></math>
+<p class="fn"><math><mi mathvariant="normal">ρ</mi><mo>=</mo><mi>E</mi><mo stretchy="false">[</mo><mi>cos</mi><mo stretchy="false">(</mo><msub><mi mathvariant="normal">θ</mi><mi>j</mi></msub><mo>−</mo><msub><mi mathvariant="normal">θ</mi><mi>k</mi></msub><mo stretchy="false">)</mo><mo stretchy="false">]</mo></math>: alinhamento médio entre duas épocas, 0 no ruído e ≈1 com fase travada.</p></div>
+<ul class="big">
+<li><b>Abrir o módulo</b>: |w|² = w·w̄ gera uma soma dupla, época contra época.</li>
+<li><b>Separar</b>: j = k dá 1 (N termos); j ≠ k vira cosseno da diferença de fase.</li>
+<li><b>Média</b>: cada par vale ρ em média; N(N−1)ρ/N = (N−1)ρ.</li>
+</ul>`,'',()=>null);
+
+add(6,`<h1>k e ρ também seguem uma Gamma</h1>
+<p>A curva Presente depende de dois números, k e ρ. Mas cada exame tem a sua resposta: uns sobem rápido, outros quase não saem do lugar.</p>
+<ul class="big">
+<li><b>Modelo hierárquico</b>: em vez de fixar k e ρ, eles viram variáveis, também Gamma.</li>
+<li><b>Hiperparâmetros</b>: sobram quatro números, a<sub>k</sub>, b<sub>k</sub>, a<sub>ρ</sub>, b<sub>ρ</sub>, que dizem quais k e ρ são comuns entre exames.</li>
+<li><b>Como achar</b>: por máxima verossimilhança dos Z, com k e ρ integrados.</li>
+</ul>
+<div class="mbox"><math display="block"><mtable columnalign="left" rowspacing="0.5em">
+<mtr><mtd><mi>Z</mi><mo>∼</mo><mi>Gamma</mi><mo stretchy="false">(</mo><mi>k</mi><mo>,</mo><mspace width="0.2em"/><mn>1</mn><mo>+</mo><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi mathvariant="normal">ρ</mi><mo stretchy="false">)</mo></mtd></mtr>
+<mtr><mtd><mi>k</mi><mo>∼</mo><mi>Gamma</mi><mo stretchy="false">(</mo><msub><mi>a</mi><mi>k</mi></msub><mo>,</mo><msub><mi>b</mi><mi>k</mi></msub><mo stretchy="false">)</mo><mspace width="2em"/><mi mathvariant="normal">ρ</mi><mo>∼</mo><mi>Gamma</mi><mo stretchy="false">(</mo><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>,</mo><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><mo stretchy="false">)</mo></mtd></mtr>
+</mtable></math></div>
+<p class="note">Falta escolher os dados para estimar esses quatro números: precisamos de exames em que sabemos que há resposta.</p>`,'',()=>null);
+
+add(6,`<h1>Para calibrar, usamos os exames com som</h1>
+<ul class="big">
+<li><b>Base</b>: as 55 gravações com estímulo, de 30 a 70 dB. Todos os voluntários ouviram os sons, então cada gravação conta como resposta presente.</li>
+<li><b>Volume</b>: 55 gravações × 8 frequências = 440 sequências, <b>13 120</b> pares (Z, N).</li>
+<li><b>Um exame, uma força</b>: cada sequência tem o seu ρ; uns sobem rápido, outros quase não saem do lugar.</li>
+<li><b>Por que não simular</b>: também testamos uma senoide somada ao ESP. Deixando um participante de fora, a calibração real teve as mesmas detecções e menos alarmes falsos (37 × 50 em 528 laterais).</li>
+<li><b>Validação</b>: calibramos com 10 voluntários e testamos no 11º; repetimos 11 vezes.</li>
+</ul>
+<p class="note">Deixar um de fora: cada voluntário é testado uma vez, com um modelo que nunca viu os dados dele.</p>`,CV+`<div class="ctl"><button id="r">Recomeçar</button></div>`,()=>{
+  const c=document.getElementById('c'),R=1.8,NV=11,TOT=NV*R+2.5;let tl=0;document.getElementById('r').onclick=()=>{tl=0};
+  const ease=u=>u<=0?0:u>=1?1:u*u*(3-2*u);
+  const rr=(x,a,b,w,h,r)=>{x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h)};
+  const av=(x,cx,cy,s,col)=>{x.fillStyle=col;x.beginPath();x.arc(cx,cy-s*.45,s*.28,0,6.3);x.fill();
+    x.beginPath();x.moveTo(cx-s*.5,cy+s*.55);x.quadraticCurveTo(cx-s*.5,cy-.05*s,cx,cy-.05*s);x.quadraticCurveTo(cx+s*.5,cy-.05*s,cx+s*.5,cy+s*.55);x.closePath();x.fill()};
+  return (t,dt)=>{if(PAUSED)tl=NV*R+1;else tl=(tl+dt)%TOT;
+    const{x,W,H}=fit(c),two=W<560,n=two?6:11,cw=(W-32)/n,s=Math.min(28,cw*.62,H*.3/((two?2:1)*1.9)),rows=two?2:1,rowH=1.28*s+18,fs=two?10:11;
+    const r=Math.min(NV-1,Math.floor(tl/R)),u=tl>=NV*R?1:(tl-r*R)/R,done=r+(u>=.8?1:0);
+    const gy=34,gh=22+rows*rowH+4,mh=26,ag=two?12:14,th=1.28*s+22,lowerH=two?th+54:th,my=gy+gh+ag,ty=Math.max(my+mh+ag,H-12-lowerH),tcx=two?W/2:W*.25;
+    const home=i=>{const row=two&&i>=6?1:0,cnt=two?(row?NV-6:6):NV,c0=two?i%6:i,x0=16+(W-32-cnt*cw)/2;return[x0+(c0+.5)*cw,gy+22+.73*s+row*rowH]};
+    const tgt=[tcx,ty+4+.73*s];
+    txt(x,`Rodada ${r+1} de ${NV}`,16,24,{c:COL.fg,b:1,s:14});stamp(x,W,'esquema');
+    // calibração
+    x.strokeStyle=COL.line;x.lineWidth=1.5;rr(x,16,gy,W-32,gh,8);x.stroke();
+    txt(x,'Calibração: 10 voluntários',24,gy+15,{c:COL.fg,b:1,s:12});
+    // modelo
+    const mw=Math.min(W-32,190),away=r<NV-1&&u>=.8?1-ease((u-.8)/.2):ease(u/.35);
+    arrow(x,tcx,gy+gh+1,tcx,my-1,COL.fg,2,7);
+    x.fillStyle=COL.p2;rr(x,tcx-mw/2,my,mw,mh,6);x.fill();x.strokeStyle=COL.fg;x.lineWidth=1.5;x.stroke();
+    txt(x,'curvas + π, A e regra',tcx,my+mh/2,{a:'center',v:'middle',s:12,c:COL.fg,b:1});
+    arrow(x,tcx,my+mh+1,tcx,ty-1,away>.02?COL.ok:COL.line,2,7);
+    // teste
+    const bw=Math.min(W-32,Math.max(110,cw*2.6));x.strokeStyle=COL.line;x.lineWidth=1.5;x.setLineDash([5,4]);rr(x,tcx-bw/2,ty,bw,th,8);x.stroke();x.setLineDash([]);
+    txt(x,'Teste',tcx-bw/2+8,ty+14,{c:COL.mut,b:1,s:12});
+    // avatares
+    for(let i=0;i<NV;i++){const h=home(i),out=i===r,d=out?away:0,px=h[0]+(tgt[0]-h[0])*d,py=h[1]+(tgt[1]-h[1])*d;
+      if(out){x.strokeStyle=COL.line;x.lineWidth=1.2;x.setLineDash([3,3]);x.beginPath();x.arc(h[0],h[1]-.1*s,s*.5,0,6.3);x.stroke();x.setLineDash([])}
+      const col=out&&d>.02?COL.ok:COL.fg;av(x,px,py,s,col);txt(x,`V${i+1}`,px,py+.55*s+12,{a:'center',s:fs,c:col===COL.ok?COL.ok:COL.mut,b:col===COL.ok})}
+    // resultados
+    const sw=Math.min(34,((two?W-32:W*.5-16)/NV)-3),sh=16,sx=W-16-NV*(sw+3)+3,sy=two?ty+th+36:ty+th-sh;
+    const capY=two?ty+th+30:ty+th-sh-8,txY=capY-18;
+    txt(x,`resultados fora da amostra: ${done}/${NV}`,W-16,capY,{a:'right',s:11,c:COL.fg});
+    if(done===NV)txt(x,'11 resultados juntos = números finais',W-16,txY,{a:'right',s:12,c:COL.ok,b:1});
+    for(let i=0;i<NV;i++){const on=i<done,px=sx+i*(sw+3);x.fillStyle=on?COL.ok:COL.p2;rr(x,px,sy,sw,sh,3);x.fill();if(!on){x.strokeStyle=COL.line;x.lineWidth=1;x.stroke()}
+      txt(x,`V${i+1}`,px+sw/2,sy+sh/2,{a:'center',v:'middle',s:10,c:on?COL.panel:COL.mut})}}},'Animação do deixar um de fora: onze voluntários em fila; a cada rodada um deles desce para a área de teste enquanto os outros dez calibram o modelo, e o resultado dele entra numa faixa que se completa em onze resultados');
+
+add(6,`<h1>Os exames com som servem para achar a, b</h1>
+<ul class="big">
+<li><b>Papel único</b>: escolher a<sub>k</sub>, b<sub>k</sub>, a<sub>ρ</sub> e b<sub>ρ</sub>.</li>
+<li><b>Um exame, um par</b>: cada sequência s tem o seu (k, ρ), o mesmo em todos os seus Z.</li>
+<li><b>Máxima verossimilhança</b>: os números que tornam as 440 sequências mais prováveis.</li>
+</ul>
+<div class="mbox"><math display="block"><mtable class="dv" rowspacing="0.6em" displaystyle="true">
+<mtr><mtd class="dl"><msub><mi>L</mi><mi>s</mi></msub></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mo>∫</mo><mo>∫</mo><munder><mo>∏</mo><mi>t</mi></munder><mrow style="color:var(--pre)"><mi>Gamma</mi><mo stretchy="false">(</mo><msub><mi>Z</mi><mi>t</mi></msub><mo>|</mo><mi>k</mi><mo>,</mo><msub><mi mathvariant="normal">μ</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mrow style="color:var(--ok)"><mi>p</mi><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mrow style="color:var(--aus)"><mi>p</mi><mo stretchy="false">(</mo><mi mathvariant="normal">ρ</mi><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mi>d</mi><mi>k</mi><mspace width="0.1em"/><mi>d</mi><mi mathvariant="normal">ρ</mi></mtd></mtr>
+<mtr><mtd class="dl"><msub><mi mathvariant="normal">μ</mi><mi>t</mi></msub></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mn>1</mn><mo>+</mo><mo stretchy="false">(</mo><msub><mi>N</mi><mi>t</mi></msub><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi mathvariant="normal">ρ</mi></mtd></mtr>
+</mtable></math></div>
+`,'',()=>null);
+
+add(6,`<h1>O argmax por extenso</h1>
+<p>Somamos o log da verossimilhança das 440 sequências. A sequência s tem T<sub>s</sub> valores Z<sub>st</sub>, com μ<sub>st</sub> = 1 + (N<sub>st</sub> − 1)ρ:</p>
+<div class="mbox"><math display="block"><mtable columnalign="left" rowspacing=".7em" displaystyle="true"><mtr><mtd><mrow><mrow><mo>(</mo><mrow><msub><mi>a</mi><mi>k</mi></msub><mo>,</mo><msub><mi>b</mi><mi>k</mi></msub><mo>,</mo><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>,</mo><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub></mrow><mo>)</mo></mrow><mo>=</mo><mo>argmax</mo><munderover><mo>∑</mo><mrow><mi>s</mi><mo>=</mo><mn>1</mn></mrow><mn>440</mn></munderover><mi>log</mi><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><mrow><mo>[</mo><mrow><mrow><munderover><mo>∏</mo><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow><msub><mi>T</mi><mi>s</mi></msub></munderover></mrow><mrow style="color:var(--pre)"><mrow><msup><mrow><mo>(</mo><mfrac><mi>k</mi><msub><mi mathvariant="normal">μ</mi><mrow><mi>s</mi><mi>t</mi></mrow></msub></mfrac><mo>)</mo></mrow><mi>k</mi></msup><mfrac><msup><msub><mi>Z</mi><mrow><mi>s</mi><mi>t</mi></mrow></msub><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><mi>k</mi><mo>)</mo></mrow></mrow></mfrac><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><msub><mi>Z</mi><mrow><mi>s</mi><mi>t</mi></mrow></msub><mo>/</mo><msub><mi mathvariant="normal">μ</mi><mrow><mi>s</mi><mi>t</mi></mrow></msub></mrow></msup></mrow></mrow></mrow><mo>]</mo></mrow></mrow></mtd></mtr><mtr><mtd><mrow><mspace width="6em"/><mo>·</mo><mrow style="color:var(--ok)"><mrow><mfrac><msup><msub><mi>b</mi><mi>k</mi></msub><msub><mi>a</mi><mi>k</mi></msub></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><msub><mi>a</mi><mi>k</mi></msub><mo>)</mo></mrow></mrow></mfrac><msup><mi>k</mi><mrow><msub><mi>a</mi><mi>k</mi></msub><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><msub><mi>b</mi><mi>k</mi></msub><mi>k</mi></mrow></msup></mrow></mrow><mo>·</mo><mrow style="color:var(--aus)"><mrow><mfrac><msup><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>)</mo></mrow></mrow></mfrac><msup><mi mathvariant="normal">ρ</mi><mrow><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><mi mathvariant="normal">ρ</mi></mrow></msup></mrow></mrow><mrow><mspace width=".3em"/><mi>d</mi><mi>k</mi><mspace width=".2em"/><mi>d</mi><mi mathvariant="normal">ρ</mi></mrow></mrow></mtd></mtr></mtable></math></div>
+<div class="leg"><span style="color:var(--pre)">todos os Z do exame, com o mesmo (k, ρ)</span><span style="color:var(--ok)">Gamma de k</span><span style="color:var(--aus)">Gamma de ρ</span></div>
+<p><b>Como o computador resolve</b> (não há fórmula fechada):</p>
+<ul>
+<li><b>Integral vira soma</b>: uma grade fixa de 170 valores de k e 800 de ρ. Cada ponto pesa conforme as Gammas de k e ρ, e o produto dos Z de cada sequência é calculado uma vez só por ponto.</li>
+<li><b>Busca do máximo</b>: L-BFGS-B, um otimizador que segue o gradiente. Ele mexe só nos pesos da grade e parte de 3 chutes iniciais; fica o melhor.</li>
+</ul>
+<p>Resultado do argmax:</p>
+<div class="mbox"><math display="block"><mrow><mrow><mo>(</mo><msub><mi>a</mi><mi>k</mi></msub><mo>,</mo><msub><mi>b</mi><mi>k</mi></msub><mo>,</mo><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>,</mo><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><mo>)</mo></mrow><mo>=</mo><mo>(</mo><mn>1,46</mn><mo>;</mo><mn>0,32</mn><mo>;</mo><mn>0,29</mn><mo>;</mo><mn>9,48</mn><mo>)</mo></mrow></math></div>
+<p>Ou seja, <span style="color:var(--ok)"><b>k ~ Gamma(1,46; 0,32)</b></span>, com média 4,6, e <span style="color:var(--aus)"><b>ρ ~ Gamma(0,29; 9,48)</b></span>, com média 0,031. São esses os números usados para montar a curva Presente, a seguir.</p>`,'',()=>null);
+
+add(6,`<h1>A integral por extenso</h1>
+<p>Trocando cada Gamma pela sua fórmula, com μ = 1 + (N − 1)ρ:</p>
+<div class="mbox"><math display="block"><mrow><mi>p</mi><mrow><mo>(</mo><mrow><mi>Z</mi><mo>|</mo><mi>N</mi></mrow><mo>)</mo></mrow><mo>=</mo><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><mrow style="color:var(--pre)"><mrow><msup><mrow><mo>(</mo><mfrac><mi>k</mi><mi mathvariant="normal">μ</mi></mfrac><mo>)</mo></mrow><mi>k</mi></msup><mfrac><msup><mi>Z</mi><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><mi>k</mi><mo>)</mo></mrow></mrow></mfrac><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mi>Z</mi><mo>/</mo><mi mathvariant="normal">μ</mi></mrow></msup></mrow></mrow><mo>·</mo><mrow style="color:var(--ok)"><mrow><mfrac><msup><msub><mi>b</mi><mi>k</mi></msub><msub><mi>a</mi><mi>k</mi></msub></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><msub><mi>a</mi><mi>k</mi></msub><mo>)</mo></mrow></mrow></mfrac><msup><mi>k</mi><mrow><msub><mi>a</mi><mi>k</mi></msub><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><msub><mi>b</mi><mi>k</mi></msub><mi>k</mi></mrow></msup></mrow></mrow><mo>·</mo><mrow style="color:var(--aus)"><mrow><mfrac><msup><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>)</mo></mrow></mrow></mfrac><msup><mi mathvariant="normal">ρ</mi><mrow><msub><mi>a</mi><mi mathvariant="normal">ρ</mi></msub><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><msub><mi>b</mi><mi mathvariant="normal">ρ</mi></msub><mi mathvariant="normal">ρ</mi></mrow></msup></mrow></mrow><mrow><mspace width=".3em"/><mi>d</mi><mi>k</mi><mspace width=".2em"/><mi>d</mi><mi mathvariant="normal">ρ</mi></mrow></mrow></math></div>
+<div class="leg"><span style="color:var(--pre)">Gamma de Z</span><span style="color:var(--ok)">Gamma de k</span><span style="color:var(--aus)">Gamma de ρ</span></div>
+<p>Com os valores ajustados no argmax, esta é a <b>pdf final dos sinais com resposta</b>:</p>
+<div class="mbox"><math display="block"><mrow><mi>p</mi><mrow><mo>(</mo><mrow><mi>Z</mi><mo>|</mo><mi>N</mi></mrow><mo>)</mo></mrow><mo>=</mo><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><msubsup><mo>∫</mo><mn>0</mn><mi>∞</mi></msubsup><mrow style="color:var(--pre)"><mrow><msup><mrow><mo>(</mo><mfrac><mi>k</mi><mi mathvariant="normal">μ</mi></mfrac><mo>)</mo></mrow><mi>k</mi></msup><mfrac><msup><mi>Z</mi><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></msup><mrow><mi mathvariant="normal">Γ</mi><mrow><mo>(</mo><mi>k</mi><mo>)</mo></mrow></mrow></mfrac><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mi>Z</mi><mo>/</mo><mi mathvariant="normal">μ</mi></mrow></msup></mrow></mrow><mo>·</mo><mrow style="color:var(--ok)"><mrow><mn>0,212</mn><msup><mi>k</mi><mn>0,46</mn></msup><msup><mi>e</mi><mrow><mo>−</mo><mn>0,32</mn><mi>k</mi></mrow></msup></mrow></mrow><mo>·</mo><mrow style="color:var(--aus)"><mrow><mn>0,617</mn><msup><mi mathvariant="normal">ρ</mi><mrow><mo>−</mo><mn>0,71</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><mn>9,48</mn><mi mathvariant="normal">ρ</mi></mrow></msup></mrow></mrow><mspace width=".3em"/><mi>d</mi><mi>k</mi><mspace width=".2em"/><mi>d</mi><mi mathvariant="normal">ρ</mi></mrow></math></div>
+<p>k aparece dentro de Γ(k), e ρ aparece dentro de μ. Por isso a integral não tem fórmula fechada: esta é a forma final, e o programa calcula o valor numericamente para cada Z e N.</p>`,'',()=>null);
+
+add(6,`<h1>Como consultar a curva Presente</h1>
+<p>A integral do quadro anterior não tem fórmula fechada, então o programa calcula o valor numericamente, como uma soma, para cada Z e N:</p>
+<div class="mbox"><math display="block"><mtable class="dv" rowspacing="0.8em" displaystyle="true">
+<mtr><mtd class="dl"><mi>p</mi><mo stretchy="false">(</mo><mi>Z</mi><mo>|</mo><mi>N</mi><mo stretchy="false">)</mo></mtd><mtd class="de"><mo>=</mo></mtd><mtd class="dr"><mo>∫</mo><mo>∫</mo><mrow style="color:var(--pre)"><mi>Gamma</mi><mo stretchy="false">(</mo><mi>Z</mi><mo>|</mo><mi>k</mi><mo>,</mo><mi mathvariant="normal">μ</mi><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mrow style="color:var(--ok)"><mi>p</mi><mo stretchy="false">(</mo><mi>k</mi><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mrow style="color:var(--aus)"><mi>p</mi><mo stretchy="false">(</mo><mi mathvariant="normal">ρ</mi><mo stretchy="false">)</mo></mrow><mspace width="0.2em"/><mi>d</mi><mi>k</mi><mspace width="0.1em"/><mi>d</mi><mi mathvariant="normal">ρ</mi></mtd></mtr>
+<mtr><mtd class="dl"></mtd><mtd class="de"><mo>≈</mo></mtd><mtd class="dr"><mfrac><mn>1</mn><mn>240</mn></mfrac><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mn>10</mn></munderover><munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mn>24</mn></munderover><mrow style="color:var(--pre)"><mi>Gamma</mi><mo stretchy="false">(</mo><mi>Z</mi><mo>|</mo><msub><mi>k</mi><mi>i</mi></msub><mo>,</mo><mn>1</mn><mo>+</mo><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><msub><mi mathvariant="normal">ρ</mi><mi>j</mi></msub><mo stretchy="false">)</mo></mrow></mtd></mtr>
+</mtable></math></div>
+<p class="note">A curva <span class="a">Ausente</span> não precisa disso: é uma Gamma com fórmula pronta.</p>
+<p>Pronto: <span class="a">curva fixa</span> + <span class="p">curva que muda com N</span> = a matriz B.</p>`,'',()=>null);
+
+add(7,`<h1>Agora B funciona como uma balança</h1>
+<ul class="big">
+<li><b>Regra</b>: chega um Z; olhamos a altura das duas curvas nesse ponto. A mais alta explica melhor esse valor.</li>
+<li><b>Exemplos</b> (use os controles):
+<ul>
+<li>Z = 6, N = 100: <span class="p">19× Presente</span>.</li>
+<li>Z = 1, N = 100: quase empate (1,2× Presente).</li>
+<li>Z = 0,5, N = 400: <span class="a">3× Ausente</span>. Depois de 400 épocas, o Z já deveria ter subido.</li>
+</ul></li>
+<li><b>Diferença do teste simples</b>: a linha do Rayleigh é a mesma em qualquer tempo; aqui, a curva Presente muda com N.</li>
+</ul>
+<p class="note">A balança satura em 100×. Ela compara explicações de um Z só; a decisão usa todos os Z.</p>`,CV+`<div class="ctl">${sl('z','Z',.2,12,.1,6)}${sl('n','N',10,480,10,100)}</div>`,()=>{
+  const c=document.getElementById('c');return()=>{const z=get('z'),n=get('n');setO('z',fmt(z,1));setO('n',n);const fa=pAus(z),fp=pPre(z,n),{x,W,H}=fit(c),b={x:44,y:28,w:W-62,h:H-142},s=plot(x,b,[0,12],[0,1.3],{xt:[0,3,6,9,12],yt:[0,.4,.8,1.2],xl:'Z',yl:'densidade'});stamp(x,W,'curvas reais');
+    curve(x,b,s,pAus,.03,12,COL.aus,3,true);curve(x,b,s,v=>pPre(v,n),.03,12,COL.pre,3,true);x.strokeStyle=COL.fg;x.lineWidth=2;x.beginPath();x.moveTo(s.sx(z),b.y);x.lineTo(s.sx(z),b.y+b.h);x.stroke();[[fa,COL.aus],[fp,COL.pre]].forEach(o=>{x.fillStyle=o[1];x.beginPath();x.arc(s.sx(z),s.sy(Math.min(o[0],1.3)),6,0,6.3);x.fill()});
+    const u=Math.max(-1,Math.min(1,Math.log(fp/fa)/Math.log(100))),cx=W/2,y=H-44,hw=(W-60)/2;x.fillStyle=COL.p2;x.fillRect(cx-hw,y,hw*2,16);x.fillStyle=u>0?COL.pre:COL.aus;x.fillRect(Math.min(cx,cx+u*hw),y,Math.abs(u)*hw,16);x.fillStyle=COL.fg;x.fillRect(cx-1,y-4,2,24);
+    const q=fp/fa;txt(x,q>=1?`${q<10?fmt(q,1):Math.round(q)}× mais compatível com Presente`:`${1/q<10?fmt(1/q,1):Math.round(1/q)}× mais compatível com Ausente`,cx,y-11,{a:'center',c:q>=1?COL.pre:COL.aus,b:1,s:15});txt(x,'← Ausente',cx-hw,y+33,{c:COL.aus});txt(x,'Presente →',cx+hw,y+33,{a:'right',c:COL.pre})}},'Duas curvas, linha em Z e balança de evidência');
+
+add(7,`<h1>A cada 10 s, o Viterbi refaz o caminho</h1>
+<ul>
+<li><b>Viterbi</b>: a cada novo Z, acha a sequência de estados mais provável para o exame inteiro até ali, combinando <b>π</b>, <b>A</b> e <b>B</b> (a balança de cada Z).
+<div class="mbox" style="margin-top:8px"><math display="block"><mi mathvariant="normal">π</mi><mo>=</mo><mrow><mo>[</mo><mtable><mtr><mtd><mn>0,7</mn></mtd><mtd><mn>0,3</mn></mtd></mtr></mtable><mo>]</mo></mrow><mspace width="1.5em"/><mi>A</mi><mo>=</mo><mrow><mo>[</mo><mtable rowspacing="0.3em" columnspacing="0.8em"><mtr><mtd><mn>0,9</mn></mtd><mtd><mn>0,1</mn></mtd></mtr><mtr><mtd><mn>0,5</mn></mtd><mtd><mn>0,5</mn></mtd></mtr></mtable><mo>]</mo></mrow></math>
+<p class="fn">Linha 1 = <span class="a">Ausente</span>; Linha 2 = <span class="p">Presente</span>. Em A: linha = agora, coluna = próximo.</p></div></li>
+<li><b>No desenho</b>: o caminho preto é o escolhido agora. Um Z novo pode mudar o caminho inteiro.</li>
+</ul>
+<p>Uma janela é <b>detectada</b> se o caminho tem algum <span class="p">Presente</span>. <b>Consideramos uma detecção</b> na primeira janela detectada, a partir da 3ª.</p>`,CV+`<div class="ctl"><button id="b1" class="on">Com resposta</button><button id="b0">Sem resposta</button><button id="r">Novo exame</button></div>`,()=>{
+  const c=document.getElementById('c'),T=24;let on=1,Z,E,R,D,path,P,done,i,tl,a,b,base,cons,posC;
+  const reset=()=>{Z=[];E=[];R=[];D=[];path=[];P=[];done=null;i=0;tl=0;a=b=0;base=Math.random()*6.28;cons=0;posC=0};reset();
+  const pick=v=>{on=v;document.getElementById('b1').className=v?'on':'';document.getElementById('b0').className=v?'':'on';reset()};
+  document.getElementById('b1').onclick=()=>pick(1);document.getElementById('b0').onclick=()=>pick(0);document.getElementById('r').onclick=reset;
+  const lA=HMM.A.map(l=>l.map(Math.log));
+  const vit=()=>{let d=[Math.log(HMM.pi[0])+E[0][0],Math.log(HMM.pi[1])+E[0][1]];const Q=[];for(let t=1;t<E.length;t++){const f=[0,1].map(s=>d[1]+lA[1][s]>d[0]+lA[0][s]?1:0);d=[0,1].map(s=>d[f[s]]+lA[f[s]][s]+E[t][s]);Q.push(f)}let s=d[1]>d[0]?1:0;const r=[s];for(let t=Q.length-1;t>=0;t--){s=Q[t][s];r.unshift(s)}P=Q;return r};
+  const step=()=>{for(let e=0;e<10;e++){const ph=phase(on?RHO:0,base);a+=Math.cos(ph);b+=Math.sin(ph)}i++;const n=i*10,z=(a*a+b*b)/n,la=lpdf(z,AUS.k,AUS.mu),lp=Math.log(pPre(z,n));
+    Z.push(z);E.push([la,lp]);R.push(lp>la);path=vit();const det=path.some(v=>v);D.push(det);if(det){cons++;posC++}else cons=0;if(i>=3&&det)done=i;else if(i>=T)done=-1};
+  return (t,dt)=>{tl+=dt;if(tl>(PAUSED?0:.7)&&done===null){tl=0;step();if(PAUSED)while(done===null)step()}
+    const{x,W,H}=fit(c);stamp(x,W,'simulação com parâmetros reais');
+    const x0=104,cw=(W-x0-16)/T,cx=j=>x0+cw*(j+.5),y1=40,h1=(H-40)*.2,yP=y1+h1+(H-40)*.16,yA=yP+(H-40)*.2,yD=yA+(H-40)*.16,rr=Math.max(4,Math.min(9,cw*.3));
+    txt(x,'Z',x0-12,y1+h1-4,{a:'right',c:COL.fg,b:1});txt(x,'cor: curva',x0-12,y1+h1*.3,{a:'right',s:11});txt(x,'mais alta',x0-12,y1+h1*.3+14,{a:'right',s:11});
+    Z.forEach((v,j)=>{const hh=Math.min(v/12,1)*h1;x.fillStyle=R[j]?COL.pre:COL.aus;x.globalAlpha=.75;x.fillRect(cx(j)-cw*.3,y1+h1-hh,cw*.6,hh)});x.globalAlpha=1;
+    x.strokeStyle=COL.line;x.lineWidth=1;x.beginPath();x.moveTo(x0,y1+h1+.5);x.lineTo(W-16,y1+h1+.5);x.stroke();
+    txt(x,'Presente',x0-12,yP+4,{a:'right',c:COL.pre,b:1});txt(x,'Ausente',x0-12,yA+4,{a:'right',c:COL.aus,b:1});
+    const ys=st=>st?yP:yA;
+    x.strokeStyle=COL.mut;x.globalAlpha=.45;x.lineWidth=1.2;P.forEach((f,j)=>{[0,1].forEach(st=>{x.beginPath();x.moveTo(cx(j),ys(f[st]));x.lineTo(cx(j+1),ys(st));x.stroke()})});x.globalAlpha=1;
+    if(path.length){x.strokeStyle=COL.fg;x.lineWidth=3.5;x.beginPath();path.forEach((st,j)=>{j?x.lineTo(cx(j),ys(st)):x.moveTo(cx(j),ys(st))});x.stroke()}
+    for(let j=0;j<Z.length;j++)[0,1].forEach(st=>{const onp=path[j]===st;x.beginPath();x.arc(cx(j),ys(st),rr,0,6.3);x.fillStyle=onp?(st?COL.pre:COL.aus):COL.panel;x.fill();x.strokeStyle=st?COL.pre:COL.aus;x.lineWidth=1.5;x.stroke()});
+    txt(x,'detectada?',x0-12,yD,{a:'right',c:COL.fg,b:1});txt(x,'(na hora)',x0-12,yD+14,{a:'right',s:11});txt(x,'cinza: melhor chegada em cada estado    preto: caminho escolhido',x0,yA+(H-40)*.08,{s:11});
+    D.forEach((v,j)=>{x.fillStyle=v?COL.pre:COL.p2;x.fillRect(cx(j)-cw*.4,yD-8,cw*.8,16)});
+    for(let j=0;j<T;j+=4)txt(x,`${(j+1)*10} s`,cx(j),yD+30,{a:'center',s:11});
+    const nI=Z.length,fr=nI?posC/nI:0,yt=H-14;
+    txt(x,`detectadas até agora: ${posC}/${nI}`,x0,yt,{c:COL.fg,s:13});
+    if(done>0){const X=cx(done-1);x.strokeStyle=on?COL.ok:COL.bad;x.lineWidth=2;x.setLineDash([5,4]);x.beginPath();x.moveTo(X+cw/2,y1);x.lineTo(X+cw/2,yD+12);x.stroke();x.setLineDash([]);
+      txt(x,`${on?'Detectou':'Alarme falso'} em ${done*10} s`,Math.min(X+cw/2+8,W-170),y1+12,{c:on?COL.ok:COL.bad,b:1,s:15})}
+    if(done===-1)txt(x,on?`${T*10} s sem detecção`:`${T*10} s, nenhum alarme`,W-16,y1+12,{a:'right',c:COL.fg,b:1,s:15})}},'Treliça do Viterbi: Z por janela, estados Ausente e Presente, melhores ligações e caminho escolhido');
+
+add(8,`<h1>O HMM empatou com o teste simples</h1>
+<ul class="big">
+<li><b>Detecção</b>: HMM <b>54,1%</b> (238/440) × Rayleigh 55,9% (246/440). McNemar: 14 casos só o Rayleigh detectou, 6 só o HMM (p = 0,12). Sem diferença.</li>
+<li><b>Alarme falso</b>: laterais 7,0% × 8,5% (5 só HMM, 13 só Rayleigh; p = 0,10); ESP 6,8% × 3,4% (3 só HMM; p = 0,25). Sem diferença significativa.</li>
+<li><b>Tempo</b>: mediana de 80 s × 95 s. Nos 232 casos detectados pelos dois, a diferença média é de 1,6 s (Wilcoxon, p = 0,9). Sem diferença.</li>
+</ul>
+<p class="note"><b>Fora da amostra:</b> cada participante foi avaliado com curvas, π, A e regra ajustados nos outros 10 (deixando um de fora), sem passar do alarme falso do Rayleigh nas laterais.</p>`,
+`<div class="pad">${[['Detecção nos alvos (som de 30 a 70 dB)',100,'%',[55.9,54.1],['246/440','238/440'],1],['Alarme falso nas laterais',20,'%',[8.5,7.0],['45/528','37/528'],0],['Alarme falso em gravações sem som (ESP)',20,'%',[3.4,6.8],['3/88','6/88'],0],['Tempo mediano até detectar',200,' s',[95,80],['média 133','média 124'],0]].map(r=>{const v=r[3],d=r[5]?v[1]-v[0]:v[0]-v[1],hm=d>0?'--ok':d<0?'--bad':'--mut';return `<div class="metric"><h3>${r[0]}</h3>${[['Rayleigh','--aus','--mut'],['HMM Viterbi','--pre',hm]].map((m,i)=>`
+<div class="row"><b style="color:var(${m[1]})">${m[0]}</b><div class="track"><i style="background:var(${m[2]})" data-w="${v[i]/r[1]*100}"></i></div><span>${String(v[i]).replace('.',',')}${r[2]} (${r[4][i]})</span></div>`).join('')}</div>`}).join('')}<p class="note" style="margin:0">Barra do HMM: <span style="color:var(--ok)">verde</span> é melhor que o Rayleigh, <span style="color:var(--bad)">vermelha</span> é pior. A cor mostra só o sentido da diferença, não que ela seja significativa. Nenhuma das diferenças é significativa. Dados reais. Sinal: eletrodo FC, sem rejeição de artefatos. HMM avaliado deixando um participante de fora. Rayleigh: limiar de 5% e 3 avaliações seguidas.</p></div>`,()=>{
+  const bars=[...document.querySelectorAll('.track i')];const g=()=>bars.forEach(b=>b.style.transform=`scaleX(${b.dataset.w/100})`);if(PAUSED)g();else setTimeout(g,60);return null});
+
+add(8,`<h1>Os limites do resultado</h1>
+<p>Pontos que pesam na leitura dos números:</p>
+<div class="cards"><div><span class="n">01</span><b>Só 11 participantes</b><p>A validação deixa um de fora por vez, mas 11 pessoas é pouco. Não é uma estimativa clínica.</p></div><div><span class="n">02</span><b>π e A escolhidos por busca</b><p>Foram os melhores de uma grade, nesses dados. Não são medidas fisiológicas.</p></div><div><span class="n">03</span><b>Evidência repetida</b><p>Z<sub>20</sub> contém as épocas de Z<sub>10</sub>, mas o modelo trata cada Z como independente. A mesma evidência conta mais de uma vez.</p></div><div><span class="n">04</span><b>Toda gravação com som conta como resposta</b><p>Quem não respondeu entra como Presente e puxa ρ para perto de 0.</p></div><div><span class="n">05</span><b>k constante</b><p>Só a média muda com N. Falta conferir se a forma também se mantém, sobretudo com N grande.</p></div><div><span class="n">06</span><b>Ajuste no limite</b><p>A(Presente→Ausente) ficou no máximo da grade em todas as rodadas; a grade talvez precise crescer.</p></div></div>
+<p class="next"><b>Próximos passos</b>: HMM de fase e Bayes hierárquico por participante.</p>`,'',()=>null);
+
+/* ---------- experimentos extras ---------- */
+// [rótulo, rótulo curto, épocas aproximadas]: ordem do protocolo concatenado
+const PROT=[['ESP','ESP',120],['30 dB','30',480],['40 dB','40',480],['50 dB','50',300],['60 dB','60',180],['70 dB','70',60]];
+const PTOT=PROT.reduce((s,p)=>s+p[2],0);
+// desenha os blocos do protocolo entre L e R; gap = espaço entre gravações; devolve [início, fim] em px de cada bloco
+function blocks(x,L,R,y,h,gap,nar,lab=true){const w=R-L-gap*(PROT.length-1);let px=L;return PROT.map((p,i)=>{const bw=w*p[2]/PTOT,col=i?COL.pre:COL.aus;
+  x.fillStyle=col;x.globalAlpha=i?.1+.06*i:.14;x.fillRect(px,y,bw,h);x.globalAlpha=1;x.strokeStyle=col;x.lineWidth=1.5;x.strokeRect(px+.75,y+.75,bw-1.5,h-1.5);
+  if(lab)txt(x,nar?p[1]:p[0],px+bw/2,y+h/2,{a:'center',v:'middle',s:nar?11:12,b:1,c:i?COL.pre:COL.aus});
+  const r=[px,px+bw];px+=bw+gap;return r})}
+
+add(9,`<div class="cover">
+<p class="cv-k">EST 613 · parte 2</p>
+<h1>Experimentos extras</h1>
+</div>`,'',()=>null);
+
+add(9,`<h1>O experimento: protocolo concatenado</h1>
+<ul class="big">
+<li><b>Antes</b>: cada gravação era um exame isolado. O estado oculto nunca mudava dentro dele.</li>
+<li><b>Agora</b>: as gravações de um participante, numa frequência, viram uma sequência só. A resposta pode "ligar" no meio.</li>
+<li><b>Ordem</b>: ESP → 30 → 40 → 50 → 60 → 70 dB. A de 70 dB é a mais curta.</li>
+<li><b>Validação</b>: deixar um participante de fora, com a mesma busca de parâmetros para Rayleigh e HMM.</li>
+</ul>
+<p class="note">Larguras proporcionais ao número aproximado de épocas.</p>`,CV,()=>{
+  const c=document.getElementById('c');
+  const nz=u=>Math.sin(u*.37+1)*.45+Math.sin(u*.83+2)*.3+Math.sin(u*1.79)*.22+Math.sin(u*4.13+4)*.14;
+  const AMP=[0,.2,.3,.4,.5,.6];
+  return t=>{const{x,W,H}=fit(c),nar=W<560,L=16,R=W-16,a=PAUSED?1:Math.min(((t*.22)%1.35),1);stamp(x,W,'esquema');
+    const bh=Math.min(36,H*.1),y1=48,bh2=Math.min(96,H*.26),y2=Math.max(y1+bh+64,H*.42);
+    txt(x,'Antes: seis exames separados',L,30,{c:COL.fg,b:1,s:14});
+    blocks(x,L,R,y1,bh,nar?6:12,nar);
+    txt(x,nar?'Agora: uma sequência só':'Agora: uma sequência por participante × frequência',L,y2-14,{c:COL.fg,b:1,s:nar?12:14});
+    const B=blocks(x,L,R,y2,bh2,0,nar,false);
+    // traço de EEG revelado da esquerda para a direita
+    const mid=y2+bh2/2,A=bh2*.2,xe=L+(R-L)*a;x.save();x.beginPath();x.rect(L,y2,xe-L,bh2);x.clip();
+    x.beginPath();for(let px=L;px<=R;px+=1.5){const i=B.findIndex(b=>px<b[1]+.01),k=i<0?5:i,y=mid-(nz(px*.9)*1.1+AMP[k]*Math.sin(px*.55))*A;px>L?x.lineTo(px,y):x.moveTo(px,y)}
+    x.strokeStyle=COL.fg;x.lineWidth=1.4;x.stroke();x.restore();
+    if(a<1){x.strokeStyle=COL.fg;x.lineWidth=2;x.beginPath();x.moveTo(xe,y2-4);x.lineTo(xe,y2+bh2+4);x.stroke()}
+    B.forEach((b,i)=>{const cx=(b[0]+b[1])/2;txt(x,nar?PROT[i][1]:PROT[i][0],cx,y2+bh2+18,{a:'center',s:nar?11:12,b:1,c:i?COL.pre:COL.aus});
+      txt(x,String(PROT[i][2]),cx,y2+bh2+34,{a:'center',s:11,c:COL.mut})});
+    txt(x,'épocas ≈',L,y2+bh2+50,{s:11});
+    const b7=B[5],c7=(b7[0]+b7[1])/2,yc=y2+bh2+84;
+    arrow(x,c7,yc-14,c7,y2+bh2+40,COL.pre,1.8,7);
+    txt(x,'70 dB: só ~60 épocas',R,yc,{a:'right',c:COL.pre,b:1,s:13})}},'Seis gravações de um participante, antes separadas, agora unidas numa sequência ESP, 30, 40, 50, 60 e 70 dB, com larguras proporcionais às épocas; a de 70 dB é a mais curta');
+
+add(9,`<h1>Como cada método lê a sequência</h1>
+<ul class="big">
+<li><b>Z recomeça</b> em cada gravação, nos dois métodos: a fase pode mudar de uma sessão para outra.</li>
+<li><b>Rayleigh</b>: cada intensidade é decidida só com a própria gravação.</li>
+<li><b>HMM</b>: o que atravessa a fronteira é a crença no estado. O posterior ao fim de uma gravação vira o prior da seguinte.</li>
+<li><b>Decisão</b>: continua separada por intensidade, pelo estado atual.</li>
+</ul>`,CV,()=>{
+  const c=document.getElementById('c');
+  // Z ilustrativo por época: média 1 + (n − 1)ρ, com ondulação; P(Presente) se aproxima de um alvo por gravação
+  const RH=[0,.004,.007,.01,.015,.035],TG=[.08,.45,.85,.93,.96,.97],Zs=[],Ps=[];let p=.3;
+  PROT.forEach((b,i)=>{for(let n=1;n<=b[2];n++){Zs.push((1+(n-1)*RH[i])*(1+.22*Math.sin(n*.17+i*1.3)+.12*Math.sin(n*.53+i))*(1-Math.exp(-n/8)));p+=(TG[i]-p)/90;Ps.push(p)}});
+  const st=[];PROT.reduce((s,b)=>{st.push(s);return s+b[2]},0);
+  return t=>{const{x,W,H}=fit(c),nar=W<560,L=16,R=W-16,sx=e=>L+e/PTOT*(R-L),ec=PAUSED?PTOT:Math.floor(Math.min(((t*240)%(PTOT+480)),PTOT));stamp(x,W);
+    blocks(x,L,R,32,20,0,nar);
+    const top=72,lh=(H-top-30)/2,hp=lh-26,b1={y:top+20,h:hp},b2={y:top+lh+20,h:hp};
+    const sy=(b,v,m)=>b.y+b.h-Math.min(v/m,1)*b.h;
+    txt(x,nar?'Rayleigh: Z zera na troca':'Rayleigh: o Z zera a cada troca de gravação',L,top+12,{c:COL.fg,b:1,s:nar?12:13});
+    txt(x,nar?'HMM: Z zera; a crença segue':'HMM: o Z zera, mas a crença P(Presente) segue',L,top+lh+12,{c:COL.fg,b:1,s:nar?12:13});
+    [b1,b2].forEach(b=>{x.strokeStyle=COL.line;x.lineWidth=1;x.beginPath();x.moveTo(L,b.y+b.h+.5);x.lineTo(R,b.y+b.h+.5);x.stroke();
+      x.setLineDash([3,4]);st.slice(1).forEach(s=>{x.beginPath();x.moveTo(sx(s),b.y);x.lineTo(sx(s),b.y+b.h);x.stroke()});x.setLineDash([])});
+    // limiar do Rayleigh
+    x.setLineDash([6,5]);x.strokeStyle=COL.fg;x.lineWidth=1.2;x.beginPath();x.moveTo(L,sy(b1,3,6));x.lineTo(R,sy(b1,3,6));x.stroke();x.setLineDash([]);
+    txt(x,'limiar',R-4,sy(b1,3,6)-5,{a:'right',s:11,c:COL.fg});
+    // Z por gravação: sobe e volta a zero na fronteira
+    const zpath=(b,col,alpha,lw)=>{PROT.forEach((g,i)=>{const s=st[i];if(s>=ec)return;const e1=Math.min(s+g[2],ec);x.beginPath();x.moveTo(sx(s),sy(b,0,6));
+      for(let e=s;e<e1;e++)x.lineTo(sx(e+1),sy(b,Zs[e],6));if(e1===s+g[2])x.lineTo(sx(e1),sy(b,0,6));
+      x.strokeStyle=col;x.lineWidth=lw;x.globalAlpha=alpha;x.stroke();x.lineTo(sx(e1),sy(b,0,6));x.lineTo(sx(s),sy(b,0,6));x.closePath();x.globalAlpha=alpha*.16;x.fillStyle=col;x.fill();x.globalAlpha=1})};
+    zpath(b1,COL.fg,1,2);zpath(b2,COL.mut,.7,1.4);
+    // P(Presente) contínua no HMM
+    x.beginPath();for(let e=0;e<ec;e++){const px=sx(e+1),py=sy(b2,Ps[e],1);e?x.lineTo(px,py):x.moveTo(px,py)}x.strokeStyle=COL.pre;x.lineWidth=3;x.lineJoin='round';x.stroke();
+    if(ec>0){const e=Math.max(ec-1,0);x.fillStyle=COL.pre;x.beginPath();x.arc(sx(ec),sy(b2,Ps[e],1),5,0,6.3);x.fill()}
+    if(ec<PTOT){x.strokeStyle=COL.fg;x.lineWidth=1.5;x.beginPath();x.moveTo(sx(ec),b1.y);x.lineTo(sx(ec),b2.y+b2.h);x.stroke()}
+    const ly=H-10;txt(x,'cinza: Z (recomeça)',L,ly,{s:nar?11:12});txt(x,nar?'laranja: P(Presente)':'laranja: P(Presente) (atravessa)',R,ly,{a:'right',s:nar?11:12,c:COL.pre})}},'Duas faixas sobre a sequência concatenada: no Rayleigh, o Z sobe dentro de cada gravação e volta a zero na troca; no HMM, o Z também recomeça, mas a linha de P(Presente) é contínua, sobe de 30 a 50 dB e entra alta em 60 e 70 dB');
+
+add(9,`<h1>Resultado: o HMM ganha nas gravações curtas</h1>
+<div class="tw"><table class="tab">
+<thead><tr><th></th><th></th><th class="gr vs" colspan="5">detecção por intensidade</th><th class="gr vs" colspan="2">alarme falso</th></tr>
+<tr><th>Método</th><th>Detecção</th><th class="vs">30 dB</th><th>40 dB</th><th>50 dB</th><th>60 dB</th><th>70 dB</th><th class="vs">laterais</th><th>ESP</th></tr></thead>
+<tbody><tr><td><b style="color:var(--aus)">Rayleigh</b></td><td>55,5%</td><td class="vs">43,2%</td><td>71,6%</td><td>70,5%</td><td>54,5%</td><td>37,5%</td><td class="vs">8,9%</td><td>3,4%</td></tr>
+<tr><td><b style="color:var(--pre)">HMM</b></td><td class="g">65,5%</td><td class="vs r">39,8%</td><td class="r">65,9%</td><td class="g">76,1%</td><td class="g">78,4%</td><td class="g">67,0%</td><td class="vs r">10,6%</td><td class="g">1,1%</td></tr></tbody>
+</table></div>
+<ul class="big">
+<li><b>Ganho nas gravações curtas</b> (60 e 70 dB): o HMM chega "já desconfiado", porque viu resposta nas intensidades anteriores.</li>
+<li><b>Custo</b>: um pouco mais de alarme falso nas laterais (10,6% × 8,9%, diferença não significativa). A memória carrega também os erros.</li>
+<li><b>Ressalva</b>: em 70 dB, quase todas as detecções do HMM vieram logo no início da gravação, herdadas do estado em 60 dB. É mais memória do que evidência nova. Exploratório, 11 participantes.</li>
+</ul>
+<p class="note">Fora da amostra (deixando um participante de fora). Detecção sobre 440 alvos (88 por intensidade); FP laterais sobre 528; FP ESP sobre 88. Destaque do HMM: <span style="color:var(--ok)">verde</span> onde ganha, <span style="color:var(--bad)">vermelho</span> onde perde, sem indicar significância.</p>`,'',()=>null);
+
+/* ---------- navegação ---------- */
+let cur=0,draw=null,last=0,elapsed=0;
+const root=document.getElementById('slide'),mapE=document.getElementById('map'),glos=document.getElementById('glos');
+mapE.innerHTML=STAGES.map(s=>`<span>${s}</span>`).join('');
+document.getElementById('gb').onclick=()=>{glos.hidden=false};document.getElementById('gc').onclick=()=>{glos.hidden=true};
+function go(i){cur=Math.max(0,Math.min(S.length-1,i));const s=S[cur];
+  root.className=s.stageH?'':'full';root.innerHTML=`<div class="txt">${s.text}</div>`+(s.stageH?`<div class="stage">${s.stageH}</div>`:'');root.scrollTop=0;
+  const c=document.getElementById('c');if(c&&s.alt)c.setAttribute('aria-label',s.alt);
+  draw=s.mount();elapsed=0;
+  document.getElementById('count').textContent=`${cur+1} / ${S.length}`;
+  [...mapE.children].forEach((e,j)=>{e.className=j===s.st?'on':j<s.st?'done':''});
+  document.getElementById('prev').disabled=cur===0;document.getElementById('next').disabled=cur===S.length-1;
+  try{history.replaceState(null,'','#q'+(cur+1))}catch(e){}
+  if(PAUSED&&draw){draw(40,2);root.querySelectorAll('input').forEach(e=>e.addEventListener('input',()=>draw(40,0)));root.querySelectorAll('button').forEach(e=>e.addEventListener('click',()=>setTimeout(()=>draw(40,2))))}}
+document.getElementById('prev').onclick=()=>go(cur-1);document.getElementById('next').onclick=()=>go(cur+1);
+const animB=document.getElementById('anim');animB.textContent=PAUSED?'Animar':'Pausar animação';
+animB.onclick=()=>{PAUSED=!PAUSED;animB.textContent=PAUSED?'Animar':'Pausar animação';try{localStorage.setItem('anim',PAUSED?'off':'on')}catch(e){}go(cur)};
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.key==='ArrowRight'||e.key==='PageDown')go(cur+1);if(e.key==='ArrowLeft'||e.key==='PageUp')go(cur-1);if(e.key==='Escape')glos.hidden=true});
+function loop(ts){const dt=Math.min((ts-last)/1000||0,.05);last=ts;elapsed+=dt;if(draw&&!PAUSED)draw(elapsed,dt);requestAnimationFrame(loop)}
+const h=/^#q(\d+)$/.exec(location.hash);go(h?+h[1]-1:0);requestAnimationFrame(loop);
+</script>

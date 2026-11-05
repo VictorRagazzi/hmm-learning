@@ -1,0 +1,1188 @@
+{
+  "configuracao": {
+    "alfa": 0.05,
+    "fp_maximo": 0.07,
+    "ks_p_minimo": 0.05,
+    "topo_k": [
+      2,
+      3,
+      4,
+      6
+    ],
+    "fatores_rejeicao": [
+      null,
+      1.5,
+      2.0,
+      3.0
+    ],
+    "nomes_eletrodos": [
+      "FC",
+      "F4",
+      "T6",
+      "P4",
+      "T4",
+      "Oz",
+      "C4",
+      "T5",
+      "P3",
+      "F7",
+      "F3",
+      "T3",
+      "C3",
+      "Fz",
+      "Pz",
+      "Cz"
+    ],
+    "ranking_canais": [
+      "FC",
+      "Fz",
+      "Cz",
+      "F4",
+      "C4",
+      "P3",
+      "C3",
+      "Pz",
+      "F3",
+      "F7",
+      "Oz",
+      "T3",
+      "T5",
+      "T4",
+      "P4",
+      "T6"
+    ],
+    "vazamento": "ranking e escolha usam os mesmos dados da avaliacao (in-sample)"
+  },
+  "regra_escolha": "maior deteccao com FP lateral <= fp_maximo e KS ESP p > ks_p_minimo; desempate pelo menor FP lateral",
+  "escolhida": {
+    "bloco": "rejeicao",
+    "nome": "media:top4|rej2.0",
+    "combinacao": "media",
+    "canais": [
+      0,
+      13,
+      15,
+      1
+    ],
+    "rejeicao_fator": 2.0,
+    "deteccao": 0.575,
+    "fp_lateral": 0.03598484848484849,
+    "fp_alvo_esp": 0.045454545454545456,
+    "n": {
+      "alvo_estimulo": 440,
+      "lateral": 528,
+      "alvo_esp": 88
+    },
+    "ks_esp_estatistica": 0.09038942585965834,
+    "ks_esp_p": 0.4426117437074619,
+    "fracao_rejeitada": 0.026309904323311133,
+    "deteccao_por_intensidade": {
+      "30dB": 0.29545454545454547,
+      "40dB": 0.7159090909090909,
+      "50dB": 0.7045454545454546,
+      "60dB": 0.6590909090909091,
+      "70dB": 0.5
+    },
+    "arquivos_variancia_desprezivel": 1,
+    "razao_variancia_minima": 0.0469651040883475,
+    "elegivel": true
+  },
+  "avisos": [
+    "media:todos: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.0437)",
+    "media:top4: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.047)",
+    "media:top6: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.0476)",
+    "media:top4|rej1.5: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.047)",
+    "media:top4|rej2.0: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.047)",
+    "media:top4|rej3.0: 1 arquivos com variância do sinal combinado < 5% da média dos canais (mínimo 0.047)"
+  ],
+  "canais": [
+    {
+      "bloco": "canais",
+      "nome": "canal:FC",
+      "combinacao": "canal",
+      "canais": [
+        0
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5340909090909091,
+      "fp_lateral": 0.03977272727272727,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10826412805591701,
+      "ks_esp_p": 0.23602111939749723,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.3068181818181818,
+        "40dB": 0.6136363636363636,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.5795454545454546,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:F4",
+      "combinacao": "canal",
+      "canais": [
+        1
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.49318181818181817,
+      "fp_lateral": 0.04924242424242424,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10813445060988991,
+      "ks_esp_p": 0.23720781781030953,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.32954545454545453,
+        "40dB": 0.5795454545454546,
+        "50dB": 0.625,
+        "60dB": 0.5,
+        "70dB": 0.4318181818181818
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:T6",
+      "combinacao": "canal",
+      "canais": [
+        2
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.21136363636363636,
+      "fp_lateral": 0.043560606060606064,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.18721821427899887,
+      "ks_esp_p": 0.003571125018271587,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.17045454545454544,
+        "40dB": 0.25,
+        "50dB": 0.23863636363636365,
+        "60dB": 0.17045454545454544,
+        "70dB": 0.22727272727272727
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": false
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:P4",
+      "combinacao": "canal",
+      "canais": [
+        3
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.4022727272727273,
+      "fp_lateral": 0.056818181818181816,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.15002870400849788,
+      "ks_esp_p": 0.03408511433441545,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.23863636363636365,
+        "40dB": 0.45454545454545453,
+        "50dB": 0.5909090909090909,
+        "60dB": 0.4431818181818182,
+        "70dB": 0.2840909090909091
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": false
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:T4",
+      "combinacao": "canal",
+      "canais": [
+        4
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.20681818181818182,
+      "fp_lateral": 0.03409090909090909,
+      "fp_alvo_esp": 0.011363636363636364,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07378074532270168,
+      "ks_esp_p": 0.6962433195064799,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.10227272727272728,
+        "40dB": 0.25,
+        "50dB": 0.18181818181818182,
+        "60dB": 0.29545454545454547,
+        "70dB": 0.20454545454545456
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:Oz",
+      "combinacao": "canal",
+      "canais": [
+        5
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.2818181818181818,
+      "fp_lateral": 0.041666666666666664,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07974853731486542,
+      "ks_esp_p": 0.6018356445638741,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.17045454545454544,
+        "40dB": 0.3522727272727273,
+        "50dB": 0.375,
+        "60dB": 0.3181818181818182,
+        "70dB": 0.19318181818181818
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:C4",
+      "combinacao": "canal",
+      "canais": [
+        6
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.45454545454545453,
+      "fp_lateral": 0.022727272727272728,
+      "fp_alvo_esp": 0.056818181818181816,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08854661710554568,
+      "ks_esp_p": 0.4686473061318137,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.5340909090909091,
+        "50dB": 0.6022727272727273,
+        "60dB": 0.48863636363636365,
+        "70dB": 0.375
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:T5",
+      "combinacao": "canal",
+      "canais": [
+        7
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.26136363636363635,
+      "fp_lateral": 0.043560606060606064,
+      "fp_alvo_esp": 0.07954545454545454,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08577533137640392,
+      "ks_esp_p": 0.5091867410066422,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.19318181818181818,
+        "40dB": 0.3181818181818182,
+        "50dB": 0.2840909090909091,
+        "60dB": 0.25,
+        "70dB": 0.26136363636363635
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:P3",
+      "combinacao": "canal",
+      "canais": [
+        8
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.4340909090909091,
+      "fp_lateral": 0.03787878787878788,
+      "fp_alvo_esp": 0.07954545454545454,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10008600838236337,
+      "ks_esp_p": 0.319767616692057,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2159090909090909,
+        "40dB": 0.5227272727272727,
+        "50dB": 0.5454545454545454,
+        "60dB": 0.48863636363636365,
+        "70dB": 0.3977272727272727
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:F7",
+      "combinacao": "canal",
+      "canais": [
+        9
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.30227272727272725,
+      "fp_lateral": 0.03409090909090909,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07274981162415772,
+      "ks_esp_p": 0.7124268056634994,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.19318181818181818,
+        "40dB": 0.3181818181818182,
+        "50dB": 0.3522727272727273,
+        "60dB": 0.3522727272727273,
+        "70dB": 0.29545454545454547
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:F3",
+      "combinacao": "canal",
+      "canais": [
+        10
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.38636363636363635,
+      "fp_lateral": 0.032196969696969696,
+      "fp_alvo_esp": 0.056818181818181816,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10474305552532914,
+      "ks_esp_p": 0.2698412770081003,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2159090909090909,
+        "40dB": 0.5113636363636364,
+        "50dB": 0.4431818181818182,
+        "60dB": 0.375,
+        "70dB": 0.38636363636363635
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:T3",
+      "combinacao": "canal",
+      "canais": [
+        11
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.2636363636363636,
+      "fp_lateral": 0.032196969696969696,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08792483446082966,
+      "ks_esp_p": 0.47760402085472675,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2159090909090909,
+        "40dB": 0.3068181818181818,
+        "50dB": 0.29545454545454547,
+        "60dB": 0.2840909090909091,
+        "70dB": 0.2159090909090909
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:C3",
+      "combinacao": "canal",
+      "canais": [
+        12
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.42727272727272725,
+      "fp_lateral": 0.03977272727272727,
+      "fp_alvo_esp": 0.10227272727272728,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07690061738679033,
+      "ks_esp_p": 0.6468675982326393,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.25,
+        "40dB": 0.4659090909090909,
+        "50dB": 0.5340909090909091,
+        "60dB": 0.4431818181818182,
+        "70dB": 0.4431818181818182
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:Fz",
+      "combinacao": "canal",
+      "canais": [
+        13
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.509090909090909,
+      "fp_lateral": 0.032196969696969696,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10089842724829945,
+      "ks_esp_p": 0.3106274008481302,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.23863636363636365,
+        "40dB": 0.6477272727272727,
+        "50dB": 0.6363636363636364,
+        "60dB": 0.625,
+        "70dB": 0.3977272727272727
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:Pz",
+      "combinacao": "canal",
+      "canais": [
+        14
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.4068181818181818,
+      "fp_lateral": 0.026515151515151516,
+      "fp_alvo_esp": 0.07954545454545454,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.0647673707576486,
+      "ks_esp_p": 0.8306772019574992,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2840909090909091,
+        "40dB": 0.48863636363636365,
+        "50dB": 0.5340909090909091,
+        "60dB": 0.3977272727272727,
+        "70dB": 0.32954545454545453
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "canais",
+      "nome": "canal:Cz",
+      "combinacao": "canal",
+      "canais": [
+        15
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.4954545454545455,
+      "fp_lateral": 0.032196969696969696,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.06740394196677169,
+      "ks_esp_p": 0.7935331547773995,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.5909090909090909,
+        "50dB": 0.6363636363636364,
+        "60dB": 0.5454545454545454,
+        "70dB": 0.4318181818181818
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    }
+  ],
+  "combinacoes": [
+    {
+      "bloco": "combinacoes",
+      "nome": "media:todos",
+      "combinacao": "media",
+      "canais": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.45454545454545453,
+      "fp_lateral": 0.03787878787878788,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.06557499307322784,
+      "ks_esp_p": 0.8195644047621371,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.5340909090909091,
+        "50dB": 0.5568181818181818,
+        "60dB": 0.48863636363636365,
+        "70dB": 0.42045454545454547
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.04372340746901832,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "pca:todos",
+      "combinacao": "pca",
+      "canais": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.425,
+      "fp_lateral": 0.030303030303030304,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08528832252273183,
+      "ks_esp_p": 0.5164672647454736,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.23863636363636365,
+        "40dB": 0.45454545454545453,
+        "50dB": 0.5227272727272727,
+        "60dB": 0.5,
+        "70dB": 0.4090909090909091
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 7.7258630475237,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "media:top2",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5590909090909091,
+      "fp_lateral": 0.03409090909090909,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.1497491957923509,
+      "ks_esp_p": 0.034601931189979375,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.26136363636363635,
+        "40dB": 0.6590909090909091,
+        "50dB": 0.7272727272727273,
+        "60dB": 0.6477272727272727,
+        "70dB": 0.5
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 0.11588250631411279,
+      "elegivel": false
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "pca:top2",
+      "combinacao": "pca",
+      "canais": [
+        0,
+        13
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5363636363636364,
+      "fp_lateral": 0.03598484848484849,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.11388006334998968,
+      "ks_esp_p": 0.18879992006595053,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.26136363636363635,
+        "40dB": 0.6136363636363636,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.6136363636363636,
+        "70dB": 0.5
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.3892510282230746,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "media:top3",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5545454545454546,
+      "fp_lateral": 0.028409090909090908,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07417557565538124,
+      "ks_esp_p": 0.6900201112036157,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.3068181818181818,
+        "40dB": 0.6818181818181818,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.6022727272727273,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 0.17116809522548657,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "pca:top3",
+      "combinacao": "pca",
+      "canais": [
+        0,
+        13,
+        15
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5386363636363637,
+      "fp_lateral": 0.030303030303030304,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08939607768947633,
+      "ks_esp_p": 0.45654921405941584,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.3181818181818182,
+        "40dB": 0.6477272727272727,
+        "50dB": 0.6704545454545454,
+        "60dB": 0.5909090909090909,
+        "70dB": 0.4659090909090909
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 2.1752343678715587,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "media:top4",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5704545454545454,
+      "fp_lateral": 0.030303030303030304,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.1089906185941465,
+      "ks_esp_p": 0.22945496281377412,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.29545454545454547,
+        "40dB": 0.7272727272727273,
+        "50dB": 0.7045454545454546,
+        "60dB": 0.6363636363636364,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.0469651040883475,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "pca:top4",
+      "combinacao": "pca",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5386363636363637,
+      "fp_lateral": 0.026515151515151516,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07345267855125487,
+      "ks_esp_p": 0.701404480929021,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.6363636363636364,
+        "50dB": 0.6818181818181818,
+        "60dB": 0.625,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 2.6346125145933383,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "media:top6",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1,
+        6,
+        8
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5545454545454546,
+      "fp_lateral": 0.032196969696969696,
+      "fp_alvo_esp": 0.056818181818181816,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.06584674866125673,
+      "ks_esp_p": 0.8157696630901613,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.7045454545454546,
+        "50dB": 0.7272727272727273,
+        "60dB": 0.5795454545454546,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.04762861294890943,
+      "elegivel": true
+    },
+    {
+      "bloco": "combinacoes",
+      "nome": "pca:top6",
+      "combinacao": "pca",
+      "canais": [
+        0,
+        13,
+        15,
+        1,
+        6,
+        8
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5204545454545455,
+      "fp_lateral": 0.026515151515151516,
+      "fp_alvo_esp": 0.056818181818181816,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.0647787787253642,
+      "ks_esp_p": 0.8305220042893116,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.25,
+        "40dB": 0.6136363636363636,
+        "50dB": 0.6704545454545454,
+        "60dB": 0.5795454545454546,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 3.3332349552444405,
+      "elegivel": true
+    }
+  ],
+  "rejeicao": [
+    {
+      "bloco": "rejeicao",
+      "nome": "canal:FC|rej1.5",
+      "combinacao": "canal",
+      "canais": [
+        0
+      ],
+      "rejeicao_fator": 1.5,
+      "deteccao": 0.5159090909090909,
+      "fp_lateral": 0.041666666666666664,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08889756127538118,
+      "ks_esp_p": 0.463629480358426,
+      "fracao_rejeitada": 0.057558399652464204,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2840909090909091,
+        "40dB": 0.5795454545454546,
+        "50dB": 0.6818181818181818,
+        "60dB": 0.5568181818181818,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "canal:FC|rej2.0",
+      "combinacao": "canal",
+      "canais": [
+        0
+      ],
+      "rejeicao_fator": 2.0,
+      "deteccao": 0.5159090909090909,
+      "fp_lateral": 0.03787878787878788,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.07808842268191396,
+      "ks_esp_p": 0.6280435776963884,
+      "fracao_rejeitada": 0.022103254491661298,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2727272727272727,
+        "40dB": 0.5681818181818182,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.5681818181818182,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "canal:FC|rej3.0",
+      "combinacao": "canal",
+      "canais": [
+        0
+      ],
+      "rejeicao_fator": 3.0,
+      "deteccao": 0.5272727272727272,
+      "fp_lateral": 0.041666666666666664,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.11738864686261336,
+      "ks_esp_p": 0.1632530362116536,
+      "fracao_rejeitada": 0.005630603296648071,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2840909090909091,
+        "40dB": 0.6022727272727273,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.5795454545454546,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "media:top4|rej1.5",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": 1.5,
+      "deteccao": 0.5590909090909091,
+      "fp_lateral": 0.03977272727272727,
+      "fp_alvo_esp": 0.056818181818181816,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.1250465442842796,
+      "ks_esp_p": 0.11702387530506876,
+      "fracao_rejeitada": 0.06391274618300824,
+      "deteccao_por_intensidade": {
+        "30dB": 0.2840909090909091,
+        "40dB": 0.7272727272727273,
+        "50dB": 0.6704545454545454,
+        "60dB": 0.625,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.0469651040883475,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "media:top4|rej2.0",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": 2.0,
+      "deteccao": 0.575,
+      "fp_lateral": 0.03598484848484849,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.09038942585965834,
+      "ks_esp_p": 0.4426117437074619,
+      "fracao_rejeitada": 0.026309904323311133,
+      "deteccao_por_intensidade": {
+        "30dB": 0.29545454545454547,
+        "40dB": 0.7159090909090909,
+        "50dB": 0.7045454545454546,
+        "60dB": 0.6590909090909091,
+        "70dB": 0.5
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.0469651040883475,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "media:top4|rej3.0",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": 3.0,
+      "deteccao": 0.5727272727272728,
+      "fp_lateral": 0.03409090909090909,
+      "fp_alvo_esp": 0.045454545454545456,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.08807654444676238,
+      "ks_esp_p": 0.4754109253994021,
+      "fracao_rejeitada": 0.009814778940126041,
+      "deteccao_por_intensidade": {
+        "30dB": 0.29545454545454547,
+        "40dB": 0.7386363636363636,
+        "50dB": 0.7045454545454546,
+        "60dB": 0.6363636363636364,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.0469651040883475,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "canal:FC",
+      "combinacao": "canal",
+      "canais": [
+        0
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5340909090909091,
+      "fp_lateral": 0.03977272727272727,
+      "fp_alvo_esp": 0.06818181818181818,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.10826412805591701,
+      "ks_esp_p": 0.23602111939749723,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.3068181818181818,
+        "40dB": 0.6136363636363636,
+        "50dB": 0.6931818181818182,
+        "60dB": 0.5795454545454546,
+        "70dB": 0.4772727272727273
+      },
+      "arquivos_variancia_desprezivel": 0,
+      "razao_variancia_minima": 1.0,
+      "elegivel": true
+    },
+    {
+      "bloco": "rejeicao",
+      "nome": "media:top4",
+      "combinacao": "media",
+      "canais": [
+        0,
+        13,
+        15,
+        1
+      ],
+      "rejeicao_fator": null,
+      "deteccao": 0.5704545454545454,
+      "fp_lateral": 0.030303030303030304,
+      "fp_alvo_esp": 0.03409090909090909,
+      "n": {
+        "alvo_estimulo": 440,
+        "lateral": 528,
+        "alvo_esp": 88
+      },
+      "ks_esp_estatistica": 0.1089906185941465,
+      "ks_esp_p": 0.22945496281377412,
+      "fracao_rejeitada": 0.0,
+      "deteccao_por_intensidade": {
+        "30dB": 0.29545454545454547,
+        "40dB": 0.7272727272727273,
+        "50dB": 0.7045454545454546,
+        "60dB": 0.6363636363636364,
+        "70dB": 0.48863636363636365
+      },
+      "arquivos_variancia_desprezivel": 1,
+      "razao_variancia_minima": 0.0469651040883475,
+      "elegivel": true
+    }
+  ]
+}

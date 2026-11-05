@@ -1970,3 +1970,104 @@ avaliação na mesma amostra e rejeição de checkpoint de outro modo testadas.
 Reprodução do ajuste global anterior e métricas/eventos auditados. Módulo
 fixo `map_beta_hmm_loso.py` continua histórico LOSO; o comando vigente é o
 search acima. Constantes individuais e arquivos antigos preservados.
+
+## 25. Experimento enxuto `src/rayleigh_hmm/` — 22/10/2026
+
+Pedido do professor: sem concatenar ESP→30→…→70. Nova pasta independente,
+sem alterar `get_obs_matrix.py`, `get_tran_matrix.py` nem os JSON
+históricos. Descrição completa em `src/rayleigh_hmm/README.md`.
+
+- Rayleigh **acumulado**: a cada 10 épocas novas (sem sobreposição),
+  Z = N·PLV² com todas as N épocas desde o início, e p = exp(−Z). O bruto e
+  o HMM observam a mesma sequência. Z e p são equivalentes para as decisões.
+- Cada participante × condição × frequência é uma sequência independente.
+- **Exame sequencial:** a cada avaliação, só com o que já foi gravado:
+  p ≤ α (bruto) ou posteriori **filtrada** P(Presente | obs₁..t) ≥ 0,5
+  (HMM). O exame para quando a regra dispara.
+  - Regras (144): fração mínima, c consecutivas, fração E/OU consecutivas;
+    nenhuma dispara antes de 3 avaliações.
+  - Tempo de exame = épocas acumuladas × 1 s, entre os detectados. Ele é
+    limitado pela duração de cada gravação (60 s em 70 dB, 480 s em 30 dB).
+- Emissões Gamma:
+  - Ausente: MLE no ESP.
+  - Presente: média 1 + (N−1)ρ, priori k ~ Gamma(2,1) e ρ ~ Gamma(2,200),
+    verossimilhança no ESP + senoide sintética (SNR no bin ~ U(−25,−10) dB
+    por sequência, 5 repetições), posteriori em grade e emissão preditiva
+    posterior.
+  - O Presente sintético não é estimativa clínica.
+- Busca de α (bruto) ou π, A (HMM) × regra, com FP lateral ≤ 7%, in-sample.
+- Z acumulado viola a independência condicional das observações do HMM.
+  É aceito como aproximação e registrado como limitação.
+
+Resultado (semente 0), detecção /440 | FP lateral /528 | FP alvo ESP /88 |
+tempo médio/mediano:
+- Rayleigh α=0,05, 3 consecutivas: 55,9% | 8,5% | 3,4% | 133/95 s
+  (acima do teto de FP).
+- Rayleigh otimizado (α=0,02, fração ≥ 0,1 OU 2 consecutivas):
+  53,6% | 6,8% | 6,8% | 118/70 s.
+- HMM preditiva (π=[.7,.3], A=[[.98,.02],[.5,.5]], fração ≥ 0,7 OU 2
+  consecutivas): 52,5% | 6,8% | 5,7% | 122/80 s.
+- HMM MAP: 52,3% | 6,2% | 5,7% | 124/80 s.
+
+McNemar HMM × bruto: 9 × 14, p = 0,40. Tabelas geral, por intensidade e por
+paciente em `results/rayleigh_hmm/tabelas.md` e CSVs `tabela_*.csv`.
+
+```bash
+.venv/bin/python src/rayleigh_hmm/experimento.py
+.venv/bin/python -m unittest tests.test_rayleigh_hmm
+```
+
+Saídas: `results/rayleigh_hmm/` e `outputs/rayleigh_hmm/`.
+
+### 25.1 Sinal configurável e seleção (22/10/2026)
+
+- `dados.py` monta um sinal por época antes da FFT: `canal`, `media` ou
+  `pca` (1ª componente por arquivo, não supervisionada), com rejeição de
+  épocas por desvio padrão > fator × mediana. Rayleigh acumulado usa só
+  épocas válidas (N = válidas); o tempo de exame conta épocas gravadas.
+- `selecao_sinal.py` varre canais, média/PCA (todos e top-k) e rejeição com
+  um teste único no fim (α = 0,05); regra: maior detecção com FP lateral
+  ≤ 7% e KS ESP p > 0,05. Escolha in-sample (vazamento aceito).
+- Escolhido: média de FC, Fz, Cz, F4, `rejeicao_fator` 2,0 (57,5% | FP lateral
+  3,6%). Melhor canal isolado: FC (canal 0), 53,4%. Média/PCA de todos: 45,5%/42,5%.
+- `experimento.py` com esse sinal: Rayleigh otimizado 57,3% | 6,6% | 4,5% |
+  135/100 s; HMM preditiva 56,6% | 6,8% | 5,7% | 135/100 s (base canal 0:
+  53,6% e 52,5%, guardada em `results/rayleigh_hmm_baseline_canal0/`). HMM e
+  bruto continuam equivalentes (McNemar p = 0,58).
+
+### 25.2 Avaliação complementar (22/10/2026)
+
+- `avaliacao.py` reutiliza `experimento.py` e `resultados.json` (sem refazer a
+  busca; mesmas emissões e semente) e confere a reprodução das métricas das
+  gravações completas (idênticas).
+- A: curva detecção × FP lateral variando α (bruto) ou o limiar da posteriori
+  (HMM). Detecção a FP 5% | 7% | 10% | área parcial até 10%: teste único no fim
+  61,0% | 63,1% | 66,2% | 0,583; bruto 54,0% | 57,6% | 60,9% | 0,520; HMM preditiva
+  53,5% | 57,0% | 60,8% | 0,511. Bruto e HMM são equivalentes.
+- B: detecção acumulada × tempo de exame (denominador = todos os alvos).
+- C: truncamento em T = 60/120/180/300 s com só as gravações de pelo menos T s.
+  Com T = 60 s a detecção do bruto cresce de 5,7% (30 dB) a 35,2% (70 dB): o
+  declínio em 60–70 dB vem em parte da menor duração das gravações. Validação
+  in-sample; saídas em `results/rayleigh_hmm/avaliacao.{md,json}` e
+  `outputs/rayleigh_hmm/{curva_deteccao_fp,curva_deteccao_tempo,truncamento}.png`.
+
+### 25.3 Emissão Presente marginal (`hmm_marginal`)
+
+- Pdf fixa p(Z | N) = ∬ Gamma(Z | k, μ(N, ρ)) Gamma(k | a_k, b_k) Gamma(ρ | a_ρ, b_ρ)
+  dk dρ, emissão Presente de um HMM comum; nada é aprendido durante o exame.
+- Hiperparâmetros por máxima verossimilhança com um par (k, ρ) por sequência
+  sintética, em grade fixa. Ajuste: k média 4,70, dp 4,23; ρ média 0,0273, dp 0,0411;
+  sem borda. Integral da emissão: média em 240 nós (10 × 24, quantis médios), estável
+  até 600.
+- Resultado in-sample, com ajuste em dados simulados, sem validação: 56,8% | FP
+  lateral 6,8% | FP alvo ESP 5,7% | 137/100 s, contra o Rayleigh otimizado 57,3% |
+  6,6% | 4,5% | 135/100 s (McNemar 8 × 6, p = 0,79). Com 60 nós: 56,4% | 6,8% | 8,0% | 146/110 s.
+  `bruto`, `hmm_preditiva` e `hmm_map` não mudaram.
+  Detalhes em `src/rayleigh_hmm/README.md`.
+- Detecção por Viterbi (`hmm_viterbi`): mesma emissão marginal; a avaliação t é
+  detectada se o caminho de Viterbi de 1..t (causal) tiver algum estado Presente.
+  Empates ficam com Ausente. Regras, grades e limite de FP lateral ≤ 7% não mudaram.
+  Escolhido: π(Presente) = 0,2; a01 = 0,05; a10 = 0,5; fração ≥ 0,1 OU 2 consecutivas.
+  Resultado in-sample, com ajuste em dados simulados, sem validação: 56,6% | FP lateral
+  6,4% | FP alvo ESP 5,7% | 128/80 s (McNemar contra o bruto 11 × 8, p = 0,65).
+  Os demais métodos não mudaram.

@@ -1,0 +1,1143 @@
+{
+ "aviso": "exploratorio, IN-SAMPLE com vazamento direto (Presente ajustado nos mesmos alvos avaliados)",
+ "configuracao": {
+  "janelas_m": [
+   30,
+   60,
+   120,
+   240,
+   null
+  ],
+  "epocas_por_janela": 10,
+  "decisoes": [
+   "estado"
+  ],
+  "grade_pi": [
+   0.0001,
+   0.0005,
+   0.001,
+   0.005,
+   0.01,
+   0.05,
+   0.1,
+   0.2,
+   0.3,
+   0.5,
+   0.7,
+   0.9
+  ],
+  "grade_a_aus_pres": [
+   1e-05,
+   0.0001,
+   0.0005,
+   0.001,
+   0.005,
+   0.01,
+   0.02,
+   0.05,
+   0.1,
+   0.2,
+   0.3,
+   0.5
+  ],
+  "grade_a_pres_aus": [
+   0.001,
+   0.005,
+   0.01,
+   0.02,
+   0.05,
+   0.1,
+   0.2,
+   0.3,
+   0.5
+  ],
+  "minimo_avaliacoes": 3,
+  "n_regras": 144,
+  "teto_fp_lateral_n": 45,
+  "teto_fp_lateral_total": 528,
+  "referencia_confere_pipeline": true
+ },
+ "diagnostico_intensidade": {
+  "ESP": {
+   "n_gravacoes": 11,
+   "epocas_min": 30,
+   "epocas_mediana": 120.0,
+   "epocas_max": 300,
+   "janelas_min": 3,
+   "janelas_mediana": 12.0,
+   "janelas_max": 30,
+   "n_alvos": 88,
+   "z_final_mediana": 0.5569297979488526,
+   "alvos_p05_fim": 6,
+   "pct_alvos_p05_fim": 6.8181818181818175
+  },
+  "30dB": {
+   "n_gravacoes": 11,
+   "epocas_min": 480,
+   "epocas_mediana": 480.0,
+   "epocas_max": 500,
+   "janelas_min": 48,
+   "janelas_mediana": 48.0,
+   "janelas_max": 50,
+   "n_alvos": 88,
+   "z_final_mediana": 1.688773203961221,
+   "alvos_p05_fim": 27,
+   "pct_alvos_p05_fim": 30.681818181818183
+  },
+  "40dB": {
+   "n_gravacoes": 11,
+   "epocas_min": 480,
+   "epocas_mediana": 480.0,
+   "epocas_max": 480,
+   "janelas_min": 48,
+   "janelas_mediana": 48.0,
+   "janelas_max": 48,
+   "n_alvos": 88,
+   "z_final_mediana": 3.5136208664446933,
+   "alvos_p05_fim": 54,
+   "pct_alvos_p05_fim": 61.36363636363637
+  },
+  "50dB": {
+   "n_gravacoes": 11,
+   "epocas_min": 300,
+   "epocas_mediana": 300.0,
+   "epocas_max": 301,
+   "janelas_min": 30,
+   "janelas_mediana": 30.0,
+   "janelas_max": 30,
+   "n_alvos": 88,
+   "z_final_mediana": 5.418198377044098,
+   "alvos_p05_fim": 61,
+   "pct_alvos_p05_fim": 69.31818181818183
+  },
+  "60dB": {
+   "n_gravacoes": 11,
+   "epocas_min": 120,
+   "epocas_mediana": 180.0,
+   "epocas_max": 180,
+   "janelas_min": 12,
+   "janelas_mediana": 18.0,
+   "janelas_max": 18,
+   "n_alvos": 88,
+   "z_final_mediana": 3.449015854140449,
+   "alvos_p05_fim": 51,
+   "pct_alvos_p05_fim": 57.95454545454546
+  },
+  "70dB": {
+   "n_gravacoes": 11,
+   "epocas_min": 60,
+   "epocas_mediana": 60.0,
+   "epocas_max": 60,
+   "janelas_min": 6,
+   "janelas_mediana": 6.0,
+   "janelas_max": 6,
+   "n_alvos": 88,
+   "z_final_mediana": 2.944829743777123,
+   "alvos_p05_fim": 42,
+   "pct_alvos_p05_fim": 47.72727272727273
+  }
+ },
+ "bruto_referencia": {
+  "alfa": 0.05,
+  "regra": {
+   "familia": "consecutivas",
+   "consecutivas": 3
+  },
+  "metricas": {
+   "proto_alvo_det_estimulo": 82,
+   "proto_lateral_det": 35,
+   "det": 246,
+   "det_por_intensidade": {
+    "30dB": 39,
+    "40dB": 63,
+    "50dB": 63,
+    "60dB": 47,
+    "70dB": 34
+   },
+   "fp_lateral": 45,
+   "fp_esp": 3,
+   "tempo_medio_s": 132.8861788617886,
+   "tempo_mediano_s": 95.0,
+   "primeira_intensidade": {
+    "ESP": 3,
+    "30dB": 37,
+    "40dB": 32,
+    "50dB": 7,
+    "60dB": 3,
+    "70dB": 0,
+    "nenhuma": 6
+   },
+   "protocolos_com_det_estimulo": 82,
+   "consistentes_acima": 20,
+   "tempo_protocolo_medio_s": 522.560975609756,
+   "tempo_protocolo_mediano_s": 530.0
+  }
+ },
+ "por_m": {
+  "30": {
+   "ajuste": {
+    "ausente": {
+     "k": 0.9402702809813791,
+     "mu": 0.9508177630584105,
+     "n": 1160
+    },
+    "presente": {
+     "a_k": 20.045114228644962,
+     "b_k": 17.177268188846877,
+     "a_rho": 0.26136854337030363,
+     "b_rho": 9.885146833812646,
+     "k_media": 1.1669558865978564,
+     "k_desvio": 0.26064546403257377,
+     "rho_media": 0.02644053222115824,
+     "rho_desvio": 0.05171821581056193,
+     "log_verossimilhanca": -16482.01053553776,
+     "massa_fora_grade": {
+      "k": 1.4066908346989458e-34,
+      "rho": 0.004901907054683489
+     },
+     "hiper_no_limite": false,
+     "na_borda": true,
+     "dispersao_relativa_inicios": 3.7720440437816194e-07,
+     "n_sequencias": 440
+    },
+    "n_obs_esp": 1160,
+    "n_obs_estimulo": 13120
+   },
+   "metodos": {
+    "bruto_otimizado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.4,
+      "consecutivas": 3
+     },
+     "alfa": 0.05,
+     "metricas": {
+      "proto_alvo_det_estimulo": 73,
+      "proto_lateral_det": 34,
+      "det": 161,
+      "det_por_intensidade": {
+       "30dB": 21,
+       "40dB": 37,
+       "50dB": 38,
+       "60dB": 35,
+       "70dB": 30
+      },
+      "fp_lateral": 36,
+      "fp_esp": 5,
+      "tempo_medio_s": 116.3975155279503,
+      "tempo_mediano_s": 50.0,
+      "primeira_intensidade": {
+       "ESP": 5,
+       "30dB": 20,
+       "40dB": 24,
+       "50dB": 13,
+       "60dB": 7,
+       "70dB": 5,
+       "nenhuma": 14
+      },
+      "protocolos_com_det_estimulo": 73,
+      "consistentes_acima": 17,
+      "tempo_protocolo_medio_s": 738.2191780821918,
+      "tempo_protocolo_mediano_s": 760.0
+     }
+    },
+    "hmm_estado": {
+     "regra": {
+      "familia": "fracao_e_consecutivas",
+      "fracao": 0.1,
+      "consecutivas": 3
+     },
+     "pi": [
+      0.9,
+      0.1
+     ],
+     "A": [
+      [
+       0.98,
+       0.02
+      ],
+      [
+       0.01,
+       0.99
+      ]
+     ],
+     "pi_presente": 0.1,
+     "A_aus_pres": 0.02,
+     "A_pres_aus": 0.01,
+     "metricas": {
+      "proto_alvo_det_estimulo": 75,
+      "proto_lateral_det": 26,
+      "det": 254,
+      "det_por_intensidade": {
+       "30dB": 26,
+       "40dB": 42,
+       "50dB": 57,
+       "60dB": 62,
+       "70dB": 67
+      },
+      "fp_lateral": 45,
+      "fp_esp": 5,
+      "tempo_medio_s": 85.35433070866142,
+      "tempo_mediano_s": 30.0,
+      "primeira_intensidade": {
+       "ESP": 5,
+       "30dB": 21,
+       "40dB": 27,
+       "50dB": 14,
+       "60dB": 6,
+       "70dB": 2,
+       "nenhuma": 13
+      },
+      "protocolos_com_det_estimulo": 75,
+      "consistentes_acima": 56,
+      "tempo_protocolo_medio_s": 675.6,
+      "tempo_protocolo_mediano_s": 660.0
+     }
+    }
+   },
+   "pareados_vs_referencia": {
+    "bruto_otimizado": {
+     "alvos": {
+      "so_ref": 100,
+      "so_metodo": 15,
+      "p_valor": 1.3522957587316638e-16
+     },
+     "laterais": {
+      "so_ref": 29,
+      "so_metodo": 20,
+      "p_valor": 0.2528697301676033
+     },
+     "esp": {
+      "so_ref": 1,
+      "so_metodo": 3,
+      "p_valor": 0.625
+     },
+     "alvos_proto": {
+      "so_ref": 12,
+      "so_metodo": 3,
+      "p_valor": 0.03515625
+     },
+     "laterais_proto": {
+      "so_ref": 14,
+      "so_metodo": 13,
+      "p_valor": 1.0
+     },
+     "tempo": {
+      "n_pares": 146,
+      "mediana_ref_s": 60.0,
+      "mediana_metodo_s": 50.0,
+      "diferencas_zero": 30,
+      "p_valor": 0.2503963026970586
+     }
+    },
+    "hmm_estado": {
+     "alvos": {
+      "so_ref": 67,
+      "so_metodo": 75,
+      "p_valor": 0.5570709871103278
+     },
+     "laterais": {
+      "so_ref": 33,
+      "so_metodo": 33,
+      "p_valor": 1.0
+     },
+     "esp": {
+      "so_ref": 1,
+      "so_metodo": 3,
+      "p_valor": 0.625
+     },
+     "alvos_proto": {
+      "so_ref": 9,
+      "so_metodo": 2,
+      "p_valor": 0.0654296875
+     },
+     "laterais_proto": {
+      "so_ref": 22,
+      "so_metodo": 13,
+      "p_valor": 0.175465248990804
+     },
+     "tempo": {
+      "n_pares": 179,
+      "mediana_ref_s": 70.0,
+      "mediana_metodo_s": 30.0,
+      "diferencas_zero": 29,
+      "p_valor": 0.020226534693712345
+     }
+    }
+   },
+   "tempo_execucao_s": 27.068108320236206
+  },
+  "60": {
+   "ajuste": {
+    "ausente": {
+     "k": 0.9567061296110361,
+     "mu": 0.9359076049258365,
+     "n": 1160
+    },
+    "presente": {
+     "a_k": 4.101353995032921,
+     "b_k": 2.4716104921743427,
+     "a_rho": 0.3039326878293759,
+     "b_rho": 10.397426063210258,
+     "k_media": 1.659385250232066,
+     "k_desvio": 0.8193766765380475,
+     "rho_media": 0.02923153153305859,
+     "rho_desvio": 0.05302282522869073,
+     "log_verossimilhanca": -18295.457232235156,
+     "massa_fora_grade": {
+      "k": 8.982949134222557e-09,
+      "rho": 0.00207689347443241
+     },
+     "hiper_no_limite": false,
+     "na_borda": true,
+     "dispersao_relativa_inicios": 4.64570987956936e-06,
+     "n_sequencias": 440
+    },
+    "n_obs_esp": 1160,
+    "n_obs_estimulo": 13120
+   },
+   "metodos": {
+    "bruto_otimizado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.4,
+      "consecutivas": 1
+     },
+     "alfa": 0.01,
+     "metricas": {
+      "proto_alvo_det_estimulo": 80,
+      "proto_lateral_det": 40,
+      "det": 206,
+      "det_por_intensidade": {
+       "30dB": 34,
+       "40dB": 49,
+       "50dB": 51,
+       "60dB": 42,
+       "70dB": 30
+      },
+      "fp_lateral": 45,
+      "fp_esp": 5,
+      "tempo_medio_s": 133.39805825242718,
+      "tempo_mediano_s": 95.0,
+      "primeira_intensidade": {
+       "ESP": 5,
+       "30dB": 33,
+       "40dB": 27,
+       "50dB": 11,
+       "60dB": 4,
+       "70dB": 1,
+       "nenhuma": 7
+      },
+      "protocolos_com_det_estimulo": 80,
+      "consistentes_acima": 18,
+      "tempo_protocolo_medio_s": 593.5,
+      "tempo_protocolo_mediano_s": 550.0
+     }
+    },
+    "hmm_estado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.3,
+      "consecutivas": 8
+     },
+     "pi": [
+      0.99,
+      0.01
+     ],
+     "A": [
+      [
+       0.995,
+       0.005
+      ],
+      [
+       0.005,
+       0.995
+      ]
+     ],
+     "pi_presente": 0.01,
+     "A_aus_pres": 0.005,
+     "A_pres_aus": 0.005,
+     "metricas": {
+      "proto_alvo_det_estimulo": 79,
+      "proto_lateral_det": 27,
+      "det": 280,
+      "det_por_intensidade": {
+       "30dB": 33,
+       "40dB": 54,
+       "50dB": 61,
+       "60dB": 63,
+       "70dB": 69
+      },
+      "fp_lateral": 45,
+      "fp_esp": 4,
+      "tempo_medio_s": 85.92857142857143,
+      "tempo_mediano_s": 30.0,
+      "primeira_intensidade": {
+       "ESP": 4,
+       "30dB": 29,
+       "40dB": 31,
+       "50dB": 10,
+       "60dB": 3,
+       "70dB": 2,
+       "nenhuma": 9
+      },
+      "protocolos_com_det_estimulo": 79,
+      "consistentes_acima": 55,
+      "tempo_protocolo_medio_s": 585.6962025316456,
+      "tempo_protocolo_mediano_s": 510.0
+     }
+    }
+   },
+   "pareados_vs_referencia": {
+    "bruto_otimizado": {
+     "alvos": {
+      "so_ref": 68,
+      "so_metodo": 28,
+      "p_valor": 5.459154357711447e-05
+     },
+     "laterais": {
+      "so_ref": 25,
+      "so_metodo": 25,
+      "p_valor": 1.0
+     },
+     "esp": {
+      "so_ref": 1,
+      "so_metodo": 3,
+      "p_valor": 0.625
+     },
+     "alvos_proto": {
+      "so_ref": 5,
+      "so_metodo": 3,
+      "p_valor": 0.7265625
+     },
+     "laterais_proto": {
+      "so_ref": 17,
+      "so_metodo": 22,
+      "p_valor": 0.5223973804968411
+     },
+     "tempo": {
+      "n_pares": 178,
+      "mediana_ref_s": 80.0,
+      "mediana_metodo_s": 80.0,
+      "diferencas_zero": 35,
+      "p_valor": 0.24942090088649127
+     }
+    },
+    "hmm_estado": {
+     "alvos": {
+      "so_ref": 35,
+      "so_metodo": 69,
+      "p_valor": 0.0011086208878113386
+     },
+     "laterais": {
+      "so_ref": 25,
+      "so_metodo": 25,
+      "p_valor": 1.0
+     },
+     "esp": {
+      "so_ref": 0,
+      "so_metodo": 1,
+      "p_valor": 1.0
+     },
+     "alvos_proto": {
+      "so_ref": 5,
+      "so_metodo": 2,
+      "p_valor": 0.453125
+     },
+     "laterais_proto": {
+      "so_ref": 16,
+      "so_metodo": 8,
+      "p_valor": 0.15158963203430176
+     },
+     "tempo": {
+      "n_pares": 211,
+      "mediana_ref_s": 90.0,
+      "mediana_metodo_s": 30.0,
+      "diferencas_zero": 19,
+      "p_valor": 0.05185566101590858
+     }
+    }
+   },
+   "tempo_execucao_s": 27.37442421913147
+  },
+  "120": {
+   "ajuste": {
+    "ausente": {
+     "k": 0.9239371622029294,
+     "mu": 0.8970036377892123,
+     "n": 1160
+    },
+    "presente": {
+     "a_k": 1.8326776724240432,
+     "b_k": 0.6615794051685775,
+     "a_rho": 0.3155340238842088,
+     "b_rho": 10.434309989463557,
+     "k_media": 2.770155264970888,
+     "k_desvio": 2.0462611890702607,
+     "rho_media": 0.030240046941564066,
+     "rho_desvio": 0.05383433628170644,
+     "log_verossimilhanca": -19758.368293260748,
+     "massa_fora_grade": {
+      "k": 5.85520446027889e-05,
+      "rho": 0.0016390877007046458
+     },
+     "hiper_no_limite": false,
+     "na_borda": true,
+     "dispersao_relativa_inicios": 1.4438640612013387e-06,
+     "n_sequencias": 440
+    },
+    "n_obs_esp": 1160,
+    "n_obs_estimulo": 13120
+   },
+   "metodos": {
+    "bruto_otimizado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.1,
+      "consecutivas": 2
+     },
+     "alfa": 0.02,
+     "metricas": {
+      "proto_alvo_det_estimulo": 83,
+      "proto_lateral_det": 35,
+      "det": 241,
+      "det_por_intensidade": {
+       "30dB": 40,
+       "40dB": 56,
+       "50dB": 59,
+       "60dB": 46,
+       "70dB": 40
+      },
+      "fp_lateral": 40,
+      "fp_esp": 8,
+      "tempo_medio_s": 121.36929460580913,
+      "tempo_mediano_s": 70.0,
+      "primeira_intensidade": {
+       "ESP": 8,
+       "30dB": 36,
+       "40dB": 22,
+       "50dB": 14,
+       "60dB": 3,
+       "70dB": 0,
+       "nenhuma": 5
+      },
+      "protocolos_com_det_estimulo": 83,
+      "consistentes_acima": 24,
+      "tempo_protocolo_medio_s": 546.3855421686746,
+      "tempo_protocolo_mediano_s": 520.0
+     }
+    },
+    "hmm_estado": {
+     "regra": {
+      "familia": "consecutivas",
+      "consecutivas": 4
+     },
+     "pi": [
+      0.9999,
+      0.0001
+     ],
+     "A": [
+      [
+       0.9999,
+       0.0001
+      ],
+      [
+       0.01,
+       0.99
+      ]
+     ],
+     "pi_presente": 0.0001,
+     "A_aus_pres": 0.0001,
+     "A_pres_aus": 0.01,
+     "metricas": {
+      "proto_alvo_det_estimulo": 82,
+      "proto_lateral_det": 27,
+      "det": 291,
+      "det_por_intensidade": {
+       "30dB": 39,
+       "40dB": 60,
+       "50dB": 65,
+       "60dB": 68,
+       "70dB": 59
+      },
+      "fp_lateral": 45,
+      "fp_esp": 0,
+      "tempo_medio_s": 113.8487972508591,
+      "tempo_mediano_s": 40.0,
+      "primeira_intensidade": {
+       "ESP": 0,
+       "30dB": 39,
+       "40dB": 29,
+       "50dB": 12,
+       "60dB": 2,
+       "70dB": 0,
+       "nenhuma": 6
+      },
+      "protocolos_com_det_estimulo": 82,
+      "consistentes_acima": 52,
+      "tempo_protocolo_medio_s": 600.4878048780488,
+      "tempo_protocolo_mediano_s": 580.0
+     }
+    }
+   },
+   "pareados_vs_referencia": {
+    "bruto_otimizado": {
+     "alvos": {
+      "so_ref": 36,
+      "so_metodo": 31,
+      "p_valor": 0.6254068289416483
+     },
+     "laterais": {
+      "so_ref": 21,
+      "so_metodo": 16,
+      "p_valor": 0.5113757815852296
+     },
+     "esp": {
+      "so_ref": 0,
+      "so_metodo": 5,
+      "p_valor": 0.0625
+     },
+     "alvos_proto": {
+      "so_ref": 3,
+      "so_metodo": 4,
+      "p_valor": 1.0
+     },
+     "laterais_proto": {
+      "so_ref": 9,
+      "so_metodo": 9,
+      "p_valor": 1.0
+     },
+     "tempo": {
+      "n_pares": 210,
+      "mediana_ref_s": 80.0,
+      "mediana_metodo_s": 65.0,
+      "diferencas_zero": 44,
+      "p_valor": 0.0002699124401442648
+     }
+    },
+    "hmm_estado": {
+     "alvos": {
+      "so_ref": 21,
+      "so_metodo": 66,
+      "p_valor": 1.4100783873147612e-06
+     },
+     "laterais": {
+      "so_ref": 22,
+      "so_metodo": 22,
+      "p_valor": 1.0
+     },
+     "esp": {
+      "so_ref": 3,
+      "so_metodo": 0,
+      "p_valor": 0.25
+     },
+     "alvos_proto": {
+      "so_ref": 2,
+      "so_metodo": 2,
+      "p_valor": 1.0
+     },
+     "laterais_proto": {
+      "so_ref": 15,
+      "so_metodo": 7,
+      "p_valor": 0.13380050659179688
+     },
+     "tempo": {
+      "n_pares": 225,
+      "mediana_ref_s": 90.0,
+      "mediana_metodo_s": 40.0,
+      "diferencas_zero": 19,
+      "p_valor": 0.7135372267836365
+     }
+    }
+   },
+   "tempo_execucao_s": 27.972879886627197
+  },
+  "240": {
+   "ajuste": {
+    "ausente": {
+     "k": 0.9012664313751257,
+     "mu": 0.8716655869013915,
+     "n": 1160
+    },
+    "presente": {
+     "a_k": 1.5134036549654997,
+     "b_k": 0.38787951192579745,
+     "a_rho": 0.30837069544740053,
+     "b_rho": 10.123671901692635,
+     "k_media": 3.9017365146499885,
+     "k_desvio": 3.1716156252908028,
+     "rho_media": 0.030460360474132142,
+     "rho_desvio": 0.05485276048059972,
+     "log_verossimilhanca": -20344.785274617127,
+     "massa_fora_grade": {
+      "k": 0.00016671030025893806,
+      "rho": 0.0018814490531537476
+     },
+     "hiper_no_limite": false,
+     "na_borda": true,
+     "dispersao_relativa_inicios": 1.4168504032241458e-06,
+     "n_sequencias": 440
+    },
+    "n_obs_esp": 1160,
+    "n_obs_estimulo": 13120
+   },
+   "metodos": {
+    "bruto_otimizado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.1,
+      "consecutivas": 2
+     },
+     "alfa": 0.02,
+     "metricas": {
+      "proto_alvo_det_estimulo": 82,
+      "proto_lateral_det": 37,
+      "det": 236,
+      "det_por_intensidade": {
+       "30dB": 38,
+       "40dB": 52,
+       "50dB": 60,
+       "60dB": 46,
+       "70dB": 40
+      },
+      "fp_lateral": 42,
+      "fp_esp": 6,
+      "tempo_medio_s": 117.16101694915254,
+      "tempo_mediano_s": 70.0,
+      "primeira_intensidade": {
+       "ESP": 6,
+       "30dB": 36,
+       "40dB": 25,
+       "50dB": 11,
+       "60dB": 3,
+       "70dB": 1,
+       "nenhuma": 6
+      },
+      "protocolos_com_det_estimulo": 82,
+      "consistentes_acima": 24,
+      "tempo_protocolo_medio_s": 554.8780487804878,
+      "tempo_protocolo_mediano_s": 525.0
+     }
+    },
+    "hmm_estado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.1,
+      "consecutivas": 1
+     },
+     "pi": [
+      0.9999,
+      0.0001
+     ],
+     "A": [
+      [
+       0.99999,
+       1e-05
+      ],
+      [
+       0.1,
+       0.9
+      ]
+     ],
+     "pi_presente": 0.0001,
+     "A_aus_pres": 1e-05,
+     "A_pres_aus": 0.1,
+     "metricas": {
+      "proto_alvo_det_estimulo": 81,
+      "proto_lateral_det": 25,
+      "det": 289,
+      "det_por_intensidade": {
+       "30dB": 34,
+       "40dB": 59,
+       "50dB": 67,
+       "60dB": 70,
+       "70dB": 59
+      },
+      "fp_lateral": 43,
+      "fp_esp": 2,
+      "tempo_medio_s": 92.59515570934256,
+      "tempo_mediano_s": 30.0,
+      "primeira_intensidade": {
+       "ESP": 2,
+       "30dB": 32,
+       "40dB": 31,
+       "50dB": 11,
+       "60dB": 4,
+       "70dB": 1,
+       "nenhuma": 7
+      },
+      "protocolos_com_det_estimulo": 81,
+      "consistentes_acima": 53,
+      "tempo_protocolo_medio_s": 606.7901234567901,
+      "tempo_protocolo_mediano_s": 610.0
+     }
+    }
+   },
+   "pareados_vs_referencia": {
+    "bruto_otimizado": {
+     "alvos": {
+      "so_ref": 28,
+      "so_metodo": 18,
+      "p_valor": 0.18392482137699062
+     },
+     "laterais": {
+      "so_ref": 19,
+      "so_metodo": 16,
+      "p_valor": 0.735878800856881
+     },
+     "esp": {
+      "so_ref": 0,
+      "so_metodo": 3,
+      "p_valor": 0.25
+     },
+     "alvos_proto": {
+      "so_ref": 3,
+      "so_metodo": 3,
+      "p_valor": 1.0
+     },
+     "laterais_proto": {
+      "so_ref": 8,
+      "so_metodo": 10,
+      "p_valor": 0.8145294189453125
+     },
+     "tempo": {
+      "n_pares": 218,
+      "mediana_ref_s": 90.0,
+      "mediana_metodo_s": 75.0,
+      "diferencas_zero": 52,
+      "p_valor": 0.07687288577081579
+     }
+    },
+    "hmm_estado": {
+     "alvos": {
+      "so_ref": 18,
+      "so_metodo": 61,
+      "p_valor": 1.269697436840429e-06
+     },
+     "laterais": {
+      "so_ref": 19,
+      "so_metodo": 17,
+      "p_valor": 0.8679394004284404
+     },
+     "esp": {
+      "so_ref": 1,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "alvos_proto": {
+      "so_ref": 2,
+      "so_metodo": 1,
+      "p_valor": 1.0
+     },
+     "laterais_proto": {
+      "so_ref": 12,
+      "so_metodo": 2,
+      "p_valor": 0.012939453125
+     },
+     "tempo": {
+      "n_pares": 228,
+      "mediana_ref_s": 90.0,
+      "mediana_metodo_s": 30.0,
+      "diferencas_zero": 21,
+      "p_valor": 0.0043556850733408965
+     }
+    }
+   },
+   "tempo_execucao_s": 27.650972843170166
+  },
+  "None": {
+   "ajuste": {
+    "ausente": {
+     "k": 0.9136867992587864,
+     "mu": 0.8661308541046475,
+     "n": 1160
+    },
+    "presente": {
+     "a_k": 1.459894206329728,
+     "b_k": 0.31806948513236144,
+     "a_rho": 0.2894515389598654,
+     "b_rho": 9.483044180557446,
+     "k_media": 4.589859369006139,
+     "k_desvio": 3.7987322749031605,
+     "rho_media": 0.030523061313297652,
+     "rho_desvio": 0.05673357586224256,
+     "log_verossimilhanca": -19904.105522673643,
+     "massa_fora_grade": {
+      "k": 0.0001744076371410013,
+      "rho": 0.002723835452623261
+     },
+     "hiper_no_limite": false,
+     "na_borda": true,
+     "dispersao_relativa_inicios": 17.863802660928506,
+     "n_sequencias": 440
+    },
+    "n_obs_esp": 1160,
+    "n_obs_estimulo": 13120
+   },
+   "metodos": {
+    "bruto_otimizado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.7,
+      "consecutivas": 3
+     },
+     "alfa": 0.05,
+     "metricas": {
+      "proto_alvo_det_estimulo": 82,
+      "proto_lateral_det": 35,
+      "det": 246,
+      "det_por_intensidade": {
+       "30dB": 39,
+       "40dB": 63,
+       "50dB": 63,
+       "60dB": 47,
+       "70dB": 34
+      },
+      "fp_lateral": 45,
+      "fp_esp": 3,
+      "tempo_medio_s": 132.52032520325204,
+      "tempo_mediano_s": 95.0,
+      "primeira_intensidade": {
+       "ESP": 3,
+       "30dB": 37,
+       "40dB": 32,
+       "50dB": 7,
+       "60dB": 3,
+       "70dB": 0,
+       "nenhuma": 6
+      },
+      "protocolos_com_det_estimulo": 82,
+      "consistentes_acima": 20,
+      "tempo_protocolo_medio_s": 522.560975609756,
+      "tempo_protocolo_mediano_s": 530.0
+     }
+    },
+    "hmm_estado": {
+     "regra": {
+      "familia": "fracao_ou_consecutivas",
+      "fracao": 0.1,
+      "consecutivas": 1
+     },
+     "pi": [
+      0.99,
+      0.01
+     ],
+     "A": [
+      [
+       0.9999,
+       0.0001
+      ],
+      [
+       0.2,
+       0.8
+      ]
+     ],
+     "pi_presente": 0.01,
+     "A_aus_pres": 0.0001,
+     "A_pres_aus": 0.2,
+     "metricas": {
+      "proto_alvo_det_estimulo": 80,
+      "proto_lateral_det": 24,
+      "det": 285,
+      "det_por_intensidade": {
+       "30dB": 37,
+       "40dB": 63,
+       "50dB": 67,
+       "60dB": 68,
+       "70dB": 50
+      },
+      "fp_lateral": 43,
+      "fp_esp": 4,
+      "tempo_medio_s": 90.21052631578948,
+      "tempo_mediano_s": 30.0,
+      "primeira_intensidade": {
+       "ESP": 4,
+       "30dB": 33,
+       "40dB": 28,
+       "50dB": 10,
+       "60dB": 4,
+       "70dB": 1,
+       "nenhuma": 8
+      },
+      "protocolos_com_det_estimulo": 80,
+      "consistentes_acima": 46,
+      "tempo_protocolo_medio_s": 575.875,
+      "tempo_protocolo_mediano_s": 570.0
+     }
+    }
+   },
+   "pareados_vs_referencia": {
+    "bruto_otimizado": {
+     "alvos": {
+      "so_ref": 0,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "laterais": {
+      "so_ref": 0,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "esp": {
+      "so_ref": 0,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "alvos_proto": {
+      "so_ref": 0,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "laterais_proto": {
+      "so_ref": 0,
+      "so_metodo": 0,
+      "p_valor": 1.0
+     },
+     "tempo": {
+      "n_pares": 246,
+      "mediana_ref_s": 95.0,
+      "mediana_metodo_s": 95.0,
+      "diferencas_zero": 241,
+      "p_valor": 0.03389485352468927
+     }
+    },
+    "hmm_estado": {
+     "alvos": {
+      "so_ref": 13,
+      "so_metodo": 52,
+      "p_valor": 1.1688116132369708e-06
+     },
+     "laterais": {
+      "so_ref": 19,
+      "so_metodo": 17,
+      "p_valor": 0.8679394004284404
+     },
+     "esp": {
+      "so_ref": 0,
+      "so_metodo": 1,
+      "p_valor": 1.0
+     },
+     "alvos_proto": {
+      "so_ref": 2,
+      "so_metodo": 0,
+      "p_valor": 0.5
+     },
+     "laterais_proto": {
+      "so_ref": 11,
+      "so_metodo": 0,
+      "p_valor": 0.0009765625
+     },
+     "tempo": {
+      "n_pares": 233,
+      "mediana_ref_s": 90.0,
+      "mediana_metodo_s": 30.0,
+      "diferencas_zero": 23,
+      "p_valor": 0.0013493067617297554
+     }
+    }
+   },
+   "tempo_execucao_s": 27.000207662582397
+  }
+ },
+ "tempo_total_s": 168.1096580028534
+}
