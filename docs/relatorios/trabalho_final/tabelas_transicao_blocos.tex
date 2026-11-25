@@ -1,0 +1,101 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazilian]{babel}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{icomma}
+\usepackage[margin=2.5cm]{geometry}
+
+% Matriz de transicao: linhas = estado atual, colunas = proximo estado (Ausente, Presente)
+\newcommand{\matA}[4]{$\begin{bmatrix} #1 & #2 \\ #3 & #4 \end{bmatrix}$}
+
+\begin{document}
+
+\begin{table}[htbp]
+\centering
+\caption{Desempenho fora da amostra (\emph{leave-one-subject-out}) com o Rayleigh acumulado e em blocos independentes de $M$ épocas. Em cada \emph{fold}, o teto de falso positivo (FP) lateral é o do Rayleigh acumulado de referência no treino.}
+\label{tab:resultados_loso}
+\begin{tabular}{lcccc}
+\toprule
+Método & Detecção & FP lateral & FP ESP & Tempo médio / mediano (s) \\
+\midrule
+HMM, Rayleigh acumulado                         & 54,1\% & 7,0\%  & 6,8\%  & 124 / 80 \\
+Rayleigh acumulado, $\alpha = 0{,}05$, 3 consec. & 55,9\% & 8,5\%  & 3,4\%  & 133 / 95 \\
+\midrule
+HMM, blocos $M = 10$                    & 30,5\% & 9,7\%  & 5,7\%  & 165 / 140 \\
+Rayleigh, blocos $M = 10$     & 19,8\% & 8,9\%  & 9,1\%  & 63 / 50 \\
+\midrule
+HMM, blocos $M = 30$                    & 38,2\% & 10,6\% & 4,5\%  & 160 / 120 \\
+Rayleigh, blocos $M = 30$     & 30,2\% & 9,5\%  & 12,5\% & 56 / 30 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Melhor configuração da busca de parâmetros \emph{in-sample} (limite otimista), com teto de FP lateral de 8,5\%, igual ao do Rayleigh acumulado de referência.}
+\label{tab:resultados_busca}
+\begin{tabular}{lcccc}
+\toprule
+Método & Detecção & FP lateral & FP ESP & Tempo médio / mediano (s) \\
+\midrule
+Rayleigh acumulado, $\alpha = 0{,}05$, 3 consec. & 55,9\% & 8,5\% & 3,4\% & 133 / 95 \\
+\midrule
+HMM, blocos $M = 10$                                   & 32,5\% & 8,5\% & 2,3\% & 195 / 170 \\
+Rayleigh, blocos $M = 10$ ($\alpha = 0{,}3$)           & 23,2\% & 7,8\% & 8,0\% & 142 / 110 \\
+\midrule
+HMM, blocos $M = 30$                                   & 40,5\% & 8,5\% & 4,5\% & 137 / 60 \\
+Rayleigh, blocos $M = 30$ ($\alpha = 0{,}2$)           & 36,4\% & 8,1\% & 6,8\% & 99 / 60 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Detecção do HMM (calibração real, LOSO) por intensidade.}
+\label{tab:resultados_intensidade}
+\begin{tabular}{lccc}
+\toprule
+Intensidade & Acumulado & Blocos $M = 10$ & Blocos $M = 30$ \\
+\midrule
+30 dB & 42,0\% & 22,7\% & 27,3\% \\
+40 dB & 64,8\% & 44,3\% & 51,1\% \\
+50 dB & 70,5\% & 35,2\% & 46,6\% \\
+60 dB & 53,4\% & 29,5\% & 35,2\% \\
+70 dB & 39,8\% & 20,5\% & 30,7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Melhor configuração do HMM (Viterbi) na busca \emph{in-sample}, com teto de falso positivo lateral de 8,5\%. Linhas de $\mathbf{A}$: estado atual; colunas: próximo estado (Ausente, Presente).}
+\label{tab:transicao_insample}
+\begin{tabular}{lccc}
+\toprule
+Observação & $\pi(\text{Pres})$ & $\mathbf{A}$ & $1/A_{\text{Pres}\to\text{Aus}}$ \\
+\midrule
+Rayleigh acumulado  & 0,2 & \matA{0,95}{0,05}{\mathbf{0,5}}{0,5}   & 2 avaliações \\[8pt]
+Blocos, $M = 10$    & 0,2 & \matA{0,95}{0,05}{\mathbf{0,02}}{0,98} & 50 blocos \\[8pt]
+Blocos, $M = 30$    & 0,3 & \matA{0,95}{0,05}{\mathbf{0,02}}{0,98} & 50 blocos \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Parâmetros do HMM escolhidos nos 11 \emph{folds} da validação \emph{leave-one-subject-out} (braço com calibração real).}
+\label{tab:transicao_loso}
+\begin{tabular}{llll}
+\toprule
+Observação & $A_{\text{Pres}\to\text{Aus}}$ & $A_{\text{Aus}\to\text{Pres}}$ & $\pi(\text{Pres})$ \\
+\midrule
+Rayleigh acumulado & 0,5 em todos (máximo da grade) & 0,05--0,1 & 0,2--0,3 \\
+Blocos, $M = 10$   & 0,005--0,3 (mediana 0,02)        & 0,001--0,3 & 0,2--0,3 \\
+Blocos, $M = 30$   & 0,001--0,2 (10 de 11 $\leq$ 0,05) & 0,05--0,2 & 0,2--0,3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

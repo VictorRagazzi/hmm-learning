@@ -198,6 +198,181 @@ O HMM não supera a referência em detecção; a vantagem da calibração real �
 menor FP lateral. Em todos os 11 folds do braço REAL, A(Pres→Aus) escolhida é 0,5,
 o máximo da grade (ver `PROXIMOS_PASSOS.md`).
 
+## MCMC na emissão Presente (`monte_carlo/`, exploratório)
+
+Em vez de fixar a priori de (k, ρ) à mão (`PRIORI_PRESENTE`, um chute) ou estimar os
+hiperparâmetros por máxima verossimilhança (ML-II, usado no resultado oficial), o
+MCMC amostra a posteriori do modelo hierárquico. Não substitui o resultado oficial.
+
+- **Modelo:** Z | k_s, ρ_s ~ Gamma(k_s, média 1 + (N−1)ρ_s), com um par (k_s, ρ_s) por
+  sequência de calibração; k_s ~ Gamma(a_k, b_k) e ρ_s ~ Gamma(a_ρ, b_ρ).
+- **Hiperpriori:** uniforme no **log** de cada hiperparâmetro em (−5, 11), ou seja
+  p(a) ∝ 1/a entre e⁻⁵ e e¹¹ (`mc_comum.LIMITES_LOG`).
+- **Amostrador completo (`mcmc_completo.py`, variante `GIBBS`):** Metropolis-dentro-de-Gibbs
+  com 4 cadeias de inícios dispersos, 20 000 iterações, burn-in 5000, thin 10.
+  - k_s e ρ_s: Metropolis de passeio aleatório em log, um parâmetro por vez
+    (condicionais sem núcleo conhecido);
+  - b_k e b_ρ: Gibbs exato, Gamma(S·a, Σ x_s), com S sequências;
+  - a_k e a_ρ: Metropolis em log a.
+  - Passos adaptados só no burn-in (alvo de aceitação 0,44).
+- **Amostrador colapsado (`mc_comum.mcmc_hiper`, variante `MCMC`):** Metropolis-Hastings só
+  nos 4 hiperparâmetros, com (k_s, ρ_s) integrados na grade `GRADE_HIER_*`. Serve de
+  conferência do completo.
+- **Emissão:** para cada um de M = 2000 sorteios da posteriori dos hiperparâmetros,
+  sorteia-se um (k, ρ) das Gammas; p(Z | N) é a média das M Gammas. Nada é aprendido
+  durante o exame. O MCMC roda uma vez por ajuste (11 vezes no LOSO), não por paciente
+  nem por N.
+
+```bash
+cd src/rayleigh_hmm/monte_carlo
+../../../.venv/bin/python mcmc_completo.py    # diagnóstico da cadeia (~10 min; o colapsado de conferência domina)
+../../../.venv/bin/python diagnostico_mc.py   # integral por Monte Carlo e MCMC colapsado
+../../../.venv/bin/python loso_mc.py          # LOSO das variantes; retoma folds já gravados
+```
+
+Saídas em `results/rayleigh_hmm/exploratorio_monte_carlo/`: `completo/` (trace com
+burn-in, média acumulada, autocorrelação e posteriori dos hiperparâmetros; trace,
+autocorrelação e dispersão de (k_s, ρ_s) de três sequências de exemplo; comparação
+com o colapsado), `diagnostico/` e `loso/`.
+
+**Diagnóstico (11 participantes, in-sample, só para checar a cadeia).** O transiente
+acaba em cerca de 1000 iterações.
+
+| Hiperparâmetro | ML-II | Completo: média (dp) | Colapsado: média (dp) | R-hat | ESS | Tempo de autocorrelação (iterações) |
+|---|---:|---:|---:|---:|---:|---:|
+| a_k | 1,460 | 1,464 (0,106) | 1,456 (0,109) | 1,001 | 2150 | 27 |
+| b_k | 0,318 | 0,319 (0,030) | 0,317 (0,031) | 1,001 | 2224 | 25 |
+| a_ρ | 0,290 | 0,290 (0,020) | 0,289 (0,021) | 1,001 | 2698 | 19 |
+| b_ρ | 9,48 | 9,47 (1,08) | 9,47 (1,10) | 1,001 | 3892 | 9 |
+
+Completo e colapsado diferem em menos de 0,1 desvio padrão em todos os parâmetros.
+Nos latentes (440 sequências), o pior R-hat é 1,010 e o menor ESS é 733 (log ρ_s).
+Aceitação: 0,44 nos latentes e 0,42 a 0,45 nos hiperparâmetros.
+
+**LOSO (fora da amostra, braço REAL, mesmo teto de FP do oficial):**
+
+| Emissão Presente | Detecção | FP lateral | FP ESP | Tempo médio / mediano (s) |
+|---|---:|---:|---:|---:|
+| QUAD (oficial: ML-II + quadratura 10 × 24) | 54,1% | 7,0% | 6,8% | 124 / 80 |
+| MC (ML-II + 2000 sorteios) | 54,5% | 8,0% | 8,0% | 123 / 80 |
+| MCMC (colapsado) | 53,9% | 8,1% | 5,7% | 124 / 80 |
+| GIBBS (completo) | 54,1% | 8,3% | 6,8% | 125 / 80 |
+| FIXO (um único k, ρ por máxima verossimilhança) | 54,5% | 8,3% | 6,8% | 127 / 90 |
+
+O MCMC não muda o desempenho: a posteriori dos hiperparâmetros é concentrada em torno
+do ML-II (cerca de 400 sequências por fold) e só 15 das 1056 decisões do GIBBS diferem
+do oficial. O FP lateral um ponto maior aparece nas três variantes por sorteio,
+inclusive na MC, que usa os mesmos hiperparâmetros do oficial; a diferença vem de
+trocar a quadratura por sorteios, não da incerteza nos hiperparâmetros. O amostrador
+completo não trunca ρ, então não tem o problema de massa fora da grade do ajuste ML-II.
+
+**Baseline sem hierarquia (variante `FIXO`, `mc_comum.ajustar_fixo`).** Um único (k, ρ)
+para todas as sequências, por máxima verossimilhança nos pares (Z, N) do treino do fold,
+sem priori nem hiperpriori; a emissão Presente vira uma Gamma só. Entre os folds,
+k̂ fica entre 0,81 e 0,90 e ρ̂ entre 0,0105 e 0,0134. O desempenho empata com o do modelo
+hierárquico: FIXO × GIBBS dá, nos alvos, 5 sequências detectadas só pelo FIXO contra 3 só
+pelo GIBBS (McNemar p = 0,73); nas laterais 9 × 9 (p = 1,0); no ESP 1 × 1 (p = 1,0);
+no tempo, Wilcoxon p = 0,34 (235 pares). Neste conjunto de dados, a hierarquia e o MCMC
+não trazem ganho de detecção sobre uma curva Presente fixa. Hipótese não testada: a
+busca de (π, A, regra) sob o teto de FP compensa a diferença entre as curvas (as
+escolhas de π e A mudam de uma variante para a outra).
+
+## Rayleigh em blocos independentes (`explorar_independentes.py`, exploratório)
+
+Pergunta: e se cada avaliação usar só as M épocas do próprio bloco, sem acumular?
+Assim as observações do HMM passam a ser independentes, e o Presente recebe N = M
+constante. Rodou-se o mesmo LOSO do oficial, com o teto de FP por fold igual ao do
+oficial (Rayleigh acumulado de referência no treino) e nenhuma regra disparando antes
+de 30 s (`MINIMO_AVALIACOES` = 3 com M = 10 e 1 com M = 30). Saídas em
+`results/rayleigh_hmm/exploratorio_independentes/` (`resumo.md`, `M10/`, `M30/`).
+
+| Método (LOSO) | Detecção | FP lateral | FP ESP | Tempo médio / mediano (s) |
+|---|---:|---:|---:|---:|
+| Oficial acumulado: HMM-REAL | 54,1% | 7,0% | 6,8% | 124 / 80 |
+| Rayleigh acumulado α=0,05, 3 consecutivas (referência) | 55,9% | 8,5% | 3,4% | 133 / 95 |
+| M = 10 em blocos: HMM-REAL | 30,5% | 9,7% | 5,7% | 165 / 140 |
+| M = 10 em blocos: Rayleigh otimizado | 19,8% | 8,9% | 9,1% | 63 / 50 |
+| M = 30 em blocos: HMM-REAL | 38,2% | 10,6% | 4,5% | 160 / 120 |
+| M = 30 em blocos: Rayleigh otimizado | 30,2% | 9,5% | 12,5% | 56 / 30 |
+
+Em blocos, a detecção fica bem abaixo da do acumulado, em todas as intensidades e
+mesmo com FP lateral fora da amostra maior que o teto. Num bloco de 10 ou 30 épocas
+a resposta fraca não se separa do ruído; o acumulado ganha justamente por somar
+todas as épocas. Em blocos, o HMM supera o Rayleigh, já que ele soma a evidência entre
+os blocos, mas não recupera o que se perde ao descartar o acúmulo. O Rayleigh de
+blocos com α = 0,05 e 3 consecutivas quase não detecta (2,5% e 5,0%). No ajuste do
+Presente há aviso de massa de ρ fora da grade (até 17%) em vários folds.
+
+**Busca de parâmetros em blocos (`explorar_busca_independentes.py`, in-sample, com
+vazamento):** é a grade estendida de `explorar_busca.py` para o HMM Viterbi, e α até 0,3
+para o Rayleigh de blocos, com teto de FP lateral = FP do Rayleigh acumulado de
+referência (8,5%). Como limite otimista, o melhor HMM detecta 32,5% com M = 10 e 40,5%
+com M = 30; o melhor Rayleigh de blocos detecta 23,2% e 36,4%. Nem o melhor caso
+in-sample chega perto dos 55,9% do acumulado: o que limita é o tamanho do bloco, não a
+grade. Saídas em `exploratorio_independentes/busca_resumo.md` e `busca_M{10,30}/`.
+
+**Blocos independentes com emissão calibrada no Z acumulado via MCMC (`explorar_independentes_mcmc.py`, LOSO):**
+calibra Ausente (MLE) e Presente (`GIBBS`, R-hat ≤ 1,0017, ESS ≥ 2047) no Z acumulado dos
+10 participantes de treino e aplica o Z janelado (M = 30 e M = 10, sem acumular) apenas
+nas observações (N = M fixo). Em M = 30, o HMM bayesiano detecta 42,5% (FP lat. 9,5%, FP
+ESP 2,3%, tempo 125,9 / 90,0 s) contra 30,2% do Rayleigh em blocos (FP lat. 9,5%, FP ESP
+12,5%, tempo 56,4 / 30,0 s; McNemar 34 × 88, p = 1,1e−6). Em M = 10, HMM bayesiano 19,1%
+(FP lat. 9,1%, FP ESP 4,5%, 180,6 / 150,0 s) contra 19,8% do Rayleigh em blocos (FP lat.
+8,9%, FP ESP 9,1%, 62,6 / 50,0 s; p = 0,85). Saídas em
+`results/rayleigh_hmm/exploratorio_independentes/mcmc/{resultados.json,tabelas.md}`.
+
+## Outros detectores como observação (`explorar_detectores.py`, exploratório)
+
+Pergunta: o HMM melhora se observar outro teste no lugar do Rayleigh? Cada detector é
+convertido para Z = −ln p no acumulado (`detectores.py`, por somas acumuladas), então
+emissões, HMM e busca ficam iguais; só muda o Z. Detectores: Rayleigh; MSC (FC,
+Beta(1, N−1)); T² de Hotelling em (Re, Im) de FC (F(2, N−2)); MSC multivariada com FC,
+Fz, Cz, F4 (Beta(4, N−4)); F espectral em FC com ruído por época nos vizinhos 70–79 e
+98–107 Hz (F(2, 2·N·20); os alvos e laterais 81–96 Hz se intercalam a cada 1 Hz). Com um
+canal, MSC e CSM são o mesmo teste. LOSO nos dois protocolos; teto de FP lateral = FP do
+Rayleigh de referência no treino do fold, igual para todos os detectores. O Rayleigh
+reproduz exatamente os números oficiais. Saídas em
+`results/rayleigh_hmm/exploratorio_detectores/` (`tabelas.md`, `resultados.json`).
+
+| Protocolo | Detector | Método | Detecção | FP lateral | FP ESP | Tempo médio / mediano (s) |
+|---|---|---|---:|---:|---:|---:|
+| Normal | Rayleigh | HMM | 54,1% | 7,0% | 6,8% | 124 / 80 |
+| Normal | MSC | HMM | 57,0% | 9,1% | 8,0% | 124 / 80 |
+| Normal | MSC | otimizado | 58,6% | 8,5% | 9,1% | 124 / 80 |
+| Normal | Hotelling | HMM | 55,7% | 8,5% | 5,7% | 130 / 90 |
+| Normal | Hotelling | otimizado | 58,0% | 7,4% | 9,1% | 119 / 70 |
+| Normal | MMSC (4 canais) | HMM | 45,2% | 8,9% | 3,4% | 152 / 130 |
+| Normal | F espectral | HMM | 54,5% | 8,9% | 4,5% | 133 / 90 |
+| Concatenado, teto 5% | Rayleigh | HMM | 56,8% | 7,0% | 1,1% | 103 / 30 |
+| Concatenado, teto 5% | MSC | HMM | 60,7% | 7,2% | 1,1% | 98 / 30 |
+| Concatenado, teto 5% | Hotelling | HMM | 63,2% | 7,2% | 2,3% | 95 / 30 |
+| Concatenado, teto 5% | MMSC (4 canais) | HMM | 58,9% | 7,4% | 1,1% | 86 / 30 |
+| Concatenado, teto 5% | F espectral | HMM | 53,6% | 7,8% | 4,5% | 102 / 30 |
+
+Com teto de 6% no concatenado (o do relatório; saídas em
+`exploratorio_detectores_teto6/`), o HMM detecta: Rayleigh 58,2% (FP lateral 8,9%),
+MSC 61,8% (7,8%), Hotelling 64,1% (6,8%), MMSC 58,9% (7,8%), F espectral 56,6% (8,0%).
+O Rayleigh reproduz a Tabela I do relatório. Esses números estão no Apêndice B de
+`docs/relatorios/trabalho_final/main_pt.tex`.
+
+**Com MCMC completo** na emissão Presente (`--emissao mcmc --tetos 0.06`; saídas em
+`exploratorio_detectores_mcmc/`, inclusive `por_segmento_rayleigh_concatenado.csv` e os
+números para a Tabela I do relatório): o Rayleigh no normal reproduz o MCMC do relatório
+(54,1% / 8,3% / 6,8%). HMM no concatenado (teto 6%): Rayleigh 57,7% (FP lateral 8,0%), MSC
+63,2% (6,2%), Hotelling 64,1% (7,2%), MMSC 58,4% (7,6%), F espectral 56,8% (7,6%). Rayleigh
+concatenado com MCMC: McNemar alvos p = 0,005, laterais p = 0,16. No concatenado, os ajustes
+com R-hat > 1,01 são quase todos de M = 30, que nenhum fold escolheu. Use `--processos 6`:
+com 14 processos, o WSL ficou sem RAM.
+
+No protocolo normal, nenhum detector melhora o HMM com o FP controlado: MSC e Hotelling
+detectam um pouco mais, mas com FP lateral ou de ESP maior. A MMSC de 4 canais é a pior
+no normal. No concatenado, com teto de 5% no treino, Hotelling (63,2%) e MSC (60,7%)
+passam o Rayleigh (56,8%) com FP lateral quase igual. Não há teste pareado (McNemar)
+ainda, e a diferença é de cerca de 28 alvos de 440, em 11 participantes. Sob H0 (laterais
+e ESP), todos os detectores, inclusive o Rayleigh, saem levemente conservadores no EEG
+real: em todas as avaliações, Z médio entre 0,78 e 0,91 e 2,1–3,9% de p ≤ 0,05. Em ruído gaussiano simulado, a
+calibração é exata (testes).
+
 ## Resultado in-sample de `experimento.py` (sinal FC, sem rejeição, teto de FP = FP da referência)
 
 **Calibração real do Presente: avaliação in-sample com vazamento direto; não é o

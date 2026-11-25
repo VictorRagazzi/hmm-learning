@@ -15,6 +15,10 @@ import avaliacao  # noqa: E402
 import experimento  # noqa: E402
 import hmm  # noqa: E402
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "rayleigh_hmm", "monte_carlo"))
+import mcmc_completo  # noqa: E402
+import mc_comum  # noqa: E402
+
 
 class TesteRayleighHMM(unittest.TestCase):
     def test_forward_backward_igual_a_enumeracao(self):
@@ -240,6 +244,116 @@ class TesteRayleighHMM(unittest.TestCase):
         self.assertEqual(n.size, 6)
         self.assertEqual(sorted(set(ids.tolist())), [0, 1])
         self.assertEqual(np.bincount(ids).tolist(), [4, 2])
+
+    def test_mcmc_completo_dados_simulados(self):
+        rng = np.random.default_rng(7)
+        a_k, b_k, a_r, b_r = 4.0, 2.0, 3.0, 150.0
+        n_seq, T = 40, 15
+        k, rho = rng.gamma(a_k, 1 / b_k, n_seq), rng.gamma(a_r, 1 / b_r, n_seq)
+        n_ep = np.tile(10.0 * np.arange(1, T + 1), n_seq)
+        ids = np.repeat(np.arange(n_seq), T)
+        mu = emissao.media_presente(n_ep, rho[ids])
+        z = rng.gamma(k[ids], mu / k[ids])
+        res = mcmc_completo.mcmc_completo(z, n_ep, ids, n_iter=600, burn_in=300, semente=3,
+                                          idx_exemplos=[0, 5], thin=5)
+        self.assertEqual(res["cadeias"].shape, (4, 600, 4))
+        self.assertEqual(res["latentes_exemplos"].shape, (4, 600, 2, 2))
+        self.assertEqual(res["latentes_thin"].shape, (4, 60, n_seq, 2))
+        self.assertEqual(res["aceitacao"].shape, (4,))
+        for v in (res["cadeias"], res["latentes_exemplos"], res["latentes_thin"]):
+            self.assertTrue(np.all(np.isfinite(v)))
+        medias = np.exp(res["cadeias"][:, 300:]).mean(axis=(0, 1))
+        for obtido, verdadeiro in zip(medias, (a_k, b_k, a_r, b_r)):
+            self.assertLess(abs(np.log(obtido / verdadeiro)), 1.2)
+
+    def test_ajustar_fixo_dados_simulados(self):
+        rng = np.random.default_rng(11)
+        k, rho, n = 2.0, 0.02, 3000
+        n_ep = rng.integers(10, 481, n)
+        mu = emissao.media_presente(n_ep, rho)
+        z = rng.gamma(k, mu / k)
+        r = mc_comum.ajustar_fixo(z, n_ep)
+        self.assertLess(abs(r["k"] / k - 1), 0.10)
+        self.assertLess(abs(r["rho"] / rho - 1), 0.10)
+        self.assertFalse(r["na_borda"])
+
+
+def _somas_simuladas(x):
+    """Somas acumuladas (como detectores.carregar_somas) de x complexo (canais, epocas, freqs); canal 0 = FC."""
+    import detectores
+    espectro = x  # ja no dominio da frequencia; os bins sao os indices 0..F-1
+    bins_viz = np.arange(espectro.shape[2] - 20, espectro.shape[2])
+    bins = np.arange(8)
+    somas = detectores._somas_do_tipo(espectro, bins, bins_viz)
+    return {"alvo": somas, "lateral": somas, "n_viz": bins_viz.size}
+
+
+def _ruido_complexo(rng, canais, epocas, freqs):
+    return (rng.normal(size=(canais, epocas, freqs)) + 1j * rng.normal(size=(canais, epocas, freqs))) / np.sqrt(2)
+
+
+class TesteDetectores(unittest.TestCase):
+    def test_rayleigh_por_somas_igual_ao_acumulado(self):
+        import detectores
+        rng = np.random.default_rng(3)
+        x = _ruido_complexo(rng, 16, 120, 40)
+        somas = _somas_simuladas(x)
+        fim = (np.arange(12) + 1) * 10
+        z, n = detectores.z_intervalo(somas, "rayleigh", "alvo", np.zeros_like(fim), fim)
+        esperado, n_esp = dados.rayleigh_z_acumulado(dados.janelar(x[0][:, :8], 10))
+        np.testing.assert_allclose(z, esperado, rtol=1e-10, atol=1e-12)
+        np.testing.assert_array_equal(n, n_esp)
+
+    def test_intervalo_com_cap_igual_ao_calculo_direto(self):
+        import detectores
+        rng = np.random.default_rng(4)
+        x = _ruido_complexo(rng, 16, 100, 40)
+        somas = _somas_simuladas(x)
+        z, _ = detectores.z_intervalo(somas, "rayleigh", "alvo", np.array([40]), np.array([70]))
+        fases = x[0][40:70, :8] / np.abs(x[0][40:70, :8])
+        np.testing.assert_allclose(z[0], np.abs(fases.sum(axis=0)) ** 2 / 30, rtol=1e-9)
+
+    def test_calibracao_h0_dos_detectores(self):
+        import detectores
+        rng = np.random.default_rng(5)
+        n_rep, n = 4000, 20
+        x = _ruido_complexo(rng, 16, n, n_rep + 20)  # n_rep repeticoes independentes nos bins 0..n_rep-1 e vizinhos no fim
+        espectro = x
+        bins_viz = np.arange(n_rep, n_rep + 20)
+        somas = {"alvo": detectores._somas_do_tipo(espectro, np.arange(n_rep), bins_viz), "n_viz": 20}
+        for det in ("msc", "hotelling", "mmsc", "f_espectral"):
+            z, _ = detectores.z_intervalo(somas, det, "alvo", np.array([0]), np.array([n]))
+            self.assertTrue(np.all(np.isfinite(z)), det)
+            self.assertTrue(0.035 <= np.mean(np.exp(-z) <= 0.05) <= 0.065, det)
+            self.assertLess(abs(z.mean() - 1.0), 0.1, det)
+
+    def test_logsf_fechado_igual_ao_scipy(self):
+        import detectores
+        rng = np.random.default_rng(6)
+        x = _ruido_complexo(rng, 16, 30, 28)
+        somas = _somas_simuladas(x)
+        z, _ = detectores.z_intervalo(somas, "hotelling", "alvo", np.array([0]), np.array([30]))
+        for i in range(8):
+            pts = np.stack([x[0][:, i].real, x[0][:, i].imag], axis=1)
+            m, c = pts.mean(axis=0), np.cov(pts.T, ddof=1)
+            f = 28 / (2 * 29) * 30 * m @ np.linalg.solve(c, m)
+            self.assertAlmostEqual(z[0, i], -stats.f.logsf(f, 2, 28), places=8)
+        z, _ = detectores.z_intervalo(somas, "mmsc", "alvo", np.array([0]), np.array([30]))
+        for i in range(8):
+            y = x[[0, 13, 15, 1], :, i]
+            v, s = y.sum(axis=1), y @ y.conj().T
+            k2 = (v.conj() @ np.linalg.solve(s, v)).real / 30
+            self.assertAlmostEqual(z[0, i], -stats.beta.logsf(k2, 4, 26), places=8)
+
+    def test_msc_detecta_sinal_forte(self):
+        import detectores
+        rng = np.random.default_rng(7)
+        x = _ruido_complexo(rng, 16, 60, 40)
+        x[:, :, :8] += 1.5  # resposta coerente (fase constante) nos 8 bins alvo
+        somas = _somas_simuladas(x)
+        for det in detectores.DETECTORES:
+            z, _ = detectores.z_intervalo(somas, det, "alvo", np.array([0]), np.array([60]))
+            self.assertTrue(np.all(z > 20), det)
 
 
 if __name__ == "__main__":
